@@ -1,4 +1,4 @@
-# “””
+#
 Individual Behavior Support Plan Generator
 
 Streamlit app for nursery/child development professionals.
