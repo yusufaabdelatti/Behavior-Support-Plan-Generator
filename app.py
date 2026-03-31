@@ -542,16 +542,16 @@ def render_html_preview(d):
                 <div class="doc-info-val">{child_name}</div>
             </div>
             <div class="doc-info-cell">
+                <div class="doc-info-lbl">Date of Birth</div>
+                <div class="doc-info-val">{d["date_of_birth"].strftime("%d %B %Y") if d.get("date_of_birth") else "—"}</div>
+            </div>
+            <div class="doc-info-cell">
                 <div class="doc-info-lbl">Age</div>
                 <div class="doc-info-val">{d.get("age","—")}</div>
             </div>
             <div class="doc-info-cell">
                 <div class="doc-info-lbl">Class / Group</div>
                 <div class="doc-info-val">{d.get("class_group","—")}</div>
-            </div>
-            <div class="doc-info-cell">
-                <div class="doc-info-lbl">Start Date</div>
-                <div class="doc-info-val">{start}</div>
             </div>
         </div>
 
@@ -667,9 +667,9 @@ def render_html_preview(d):
                     </div>
                     <div class="doc-collab-card">
                         <div class="doc-collab-icon">👩‍🏫</div>
-                        <div class="doc-collab-title">Key Worker</div>
-                        <div class="doc-collab-body">The assigned key worker maintains session monitoring records
-                        and serves as primary liaison between the programme and the classroom environment.</div>
+                        <div class="doc-collab-title">Behavioral Therapist</div>
+                        <div class="doc-collab-body">The assigned behavioral therapist maintains session monitoring records
+                        and serves as primary liaison between the programme and the classroom environment.{f" Therapist: <strong>{d.get('therapist_name')}</strong>." if d.get('therapist_name') else ""}</div>
                     </div>
                     <div class="doc-collab-card">
                         <div class="doc-collab-icon">👨‍👩‍👧</div>
@@ -781,15 +781,18 @@ def build_pdf(d) -> bytes:
             pass
 
     # -- Demographic table ------------------------------------------------------
+    dob_str = d["date_of_birth"].strftime("%d %B %Y") if d.get("date_of_birth") else "—"
+    therapist = d.get("therapist_name") or "—"
+
     demo_rows = [
         [Paragraph("<b>Child Name</b>",     sSmall), Paragraph(child,                       sBody),
-         Paragraph("<b>Date</b>",           sSmall), Paragraph(today,                        sBody)],
+         Paragraph("<b>Date of Birth</b>",  sSmall), Paragraph(dob_str,                     sBody)],
         [Paragraph("<b>Age</b>",            sSmall), Paragraph(d.get("age","—"),            sBody),
          Paragraph("<b>Class / Group</b>",  sSmall), Paragraph(d.get("class_group","—"),    sBody)],
-        [Paragraph("<b>Start Date</b>",     sSmall), Paragraph(start,                        sBody),
-         Paragraph("<b>Sessions/month</b>", sSmall), Paragraph(str(d.get("sessions_per_month","—")), sBody)],
-        [Paragraph("<b>Frequency</b>",      sSmall), Paragraph(d.get("session_frequency","—"), sBody),
-         "", ""],
+        [Paragraph("<b>Therapist</b>",      sSmall), Paragraph(therapist,                   sBody),
+         Paragraph("<b>Start Date</b>",     sSmall), Paragraph(start,                       sBody)],
+        [Paragraph("<b>Sessions/month</b>", sSmall), Paragraph(str(d.get("sessions_per_month","—")), sBody),
+         Paragraph("<b>Frequency</b>",      sSmall), Paragraph(d.get("session_frequency","—"), sBody)],
     ]
     demo_tbl = Table(demo_rows, colWidths=[3.0*cm, 6.0*cm, 3.0*cm, 4.2*cm])
     demo_tbl.setStyle(TableStyle([
@@ -801,12 +804,11 @@ def build_pdf(d) -> bytes:
         ("TOPPADDING",   (0,0),(-1,-1), 5),
         ("BOTTOMPADDING",(0,0),(-1,-1), 5),
         ("LEFTPADDING",  (0,0),(-1,-1), 7),
-        ("SPAN",         (1,3),(3,3)),
     ]))
     story += [demo_tbl, sp(0.4)]
 
     # -- Confidential badge -----------------------------------------------------
-    badge_row = [[Paragraph("<b>  CONFIDENTIAL STAFF DOCUMENT  </b>",
+    badge_row = [[Paragraph("<b>  CONFIDENTIAL DOCUMENT  </b>",
         S("CB", fontName="Helvetica-Bold", fontSize=9, textColor=BARK, alignment=TA_CENTER))]]
     badge_tbl = Table(badge_row, colWidths=[16.2*cm])
     badge_tbl.setStyle(TableStyle([
@@ -995,7 +997,7 @@ def build_pdf(d) -> bytes:
     collab = [
         ("Nursery Team", "Teaching staff are briefed on programme goals and monitoring frameworks. "
                          "Fortnightly check-ins ensure responsiveness and fidelity to the plan."),
-        ("Key Worker",   "The assigned key worker maintains session monitoring records and serves as "
+        ("Behavioral Therapist", f"{'The therapist assigned to this programme is ' + d.get('therapist_name') + '.' if d.get('therapist_name') else 'The assigned behavioral therapist'} maintains session monitoring records and serves as "
                          "primary liaison between the programme and the classroom environment."),
         ("Family Partnership", "Parents receive regular written updates and recommended home reinforcement "
                                "strategies. Family input is actively valued and integral to all reviews."),
@@ -1031,13 +1033,553 @@ def build_pdf(d) -> bytes:
         Paragraph(f"{footer_t}  |  Generated: {today}  |  {nursery}", sFooter),
     ]
 
-    doc.build(story)
+    def add_page_number(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFont("Helvetica", 8)
+        canvas_obj.setFillColor(STONE)
+        page_num = canvas_obj.getPageNumber()
+        text = f"Page {page_num}"
+        canvas_obj.drawRightString(A4[0] - 2.2*cm, 1.2*cm, text)
+        canvas_obj.restoreState()
+
+    doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
     return buf.getvalue()
 
 
 # -----------------------------------------------------------------------------
-# DOCX GENERATION  (python-docx)
+# SUGGESTED BEHAVIORAL ACTIVITIES (for staff PDF)
 # -----------------------------------------------------------------------------
+SUGGESTED_ACTIVITIES = [
+    (
+        "Emotion Volcano 🌋",
+        "Emotional Regulation / Self-Awareness",
+        "Draw a volcano together and label the stages: calm (bottom), building up (middle), erupting (top). "
+        "Ask the child to identify where they are on the volcano throughout the session. "
+        "Practice 'cooling lava' strategies: slow belly breaths, squeezing a stress ball, or shaking hands and letting go. "
+        "Over time, aim for the child to self-identify and self-regulate before reaching the 'eruption' stage.",
+    ),
+    (
+        "Freeze & Think 🛑",
+        "Impulse Control",
+        "Play music and move around the room. When the music stops, freeze completely. "
+        "While frozen, the child must answer a 'think' question (e.g. 'What would you do if a friend took your toy?'). "
+        "Gradually extend freeze time. Use visual stop/go cards to generalise the skill to classroom triggers.",
+    ),
+    (
+        "The Waiting Jar ⏳",
+        "Frustration Tolerance / Delayed Gratification",
+        "Place a small treat or sticker inside a clear jar. Tell the child they can have it at the end of the session "
+        "if they practice waiting when something feels hard. Each time the child waits without escalating, add a "
+        "marble or token to a second jar so they can see progress visually. Celebrate each success explicitly.",
+    ),
+    (
+        "Feelings Detectives 🔍",
+        "Emotional Literacy / Communication",
+        "Use picture cards of faces showing different emotions. Ask the child to guess the feeling and think of a time "
+        "they felt that way. Role-play what that character could say or do instead of acting out. "
+        "Progress to using cartoon scenarios closer to real classroom situations.",
+    ),
+    (
+        "The Replacement Behavior Rehearsal 🔄",
+        "Functional Communication / Replacement Behaviors",
+        "Identify the top two or three problem behaviors and their typical triggers. "
+        "Explicitly teach and rehearse one replacement behavior for each (e.g., tapping the table instead of hitting; "
+        "saying 'I need a break' instead of running away). Practice in low-stakes role-play first, "
+        "then gradually introduce mild stressors to build generalisation.",
+    ),
+    (
+        "Compliment Catch 🌟",
+        "Social Skills / Peer Interaction",
+        "Sit with the child and, where safe, a peer or nursery adult. Each person catches a soft ball and must say "
+        "one genuine compliment to the next person before throwing. Begin therapist-to-child only, then introduce "
+        "a trusted peer. Debrief: 'How did it feel to give/receive a compliment?'",
+    ),
+    (
+        "Calm Corner Design 🎨",
+        "Coping Strategy Development / Self-Regulation",
+        "Collaboratively design the child's own 'calm corner' toolkit on paper or in a small box. "
+        "Include: a chosen breathing exercise card, a sensory item, a picture of something calming, and a feelings chart. "
+        "Practice using each item during the session so the child can access them independently in the classroom.",
+    ),
+    (
+        "Puppet Problem-Solving 🎭",
+        "Social Skills / Conflict Resolution",
+        "Use puppets or soft toys to act out a common conflict scenario (e.g., two puppets want the same toy). "
+        "Guide the child to direct the puppets to a solution step-by-step: stop → feel → think → act. "
+        "Switch roles so the child also plays the 'problem-solving coach'. Link solutions to real nursery situations.",
+    ),
+    (
+        "Body Check-In 🧘",
+        "Emotional Regulation / Physiological Awareness",
+        "Begin each session with a brief 'body scan': starting at the feet, notice what each part of the body feels. "
+        "Introduce vocabulary (tight shoulders = nervous; heavy arms = tired; wobbly tummy = worried). "
+        "Create a simple body map and mark where feelings live. "
+        "Repeat at the end of the session to notice any changes after regulation practice.",
+    ),
+    (
+        "The Success Story Book 📖",
+        "Self-Awareness / Progress Tracking",
+        "Each session, help the child dictate or draw one thing they did well this week — however small. "
+        "Collect these in a personalised booklet. Review together to build a narrative of competence and growth. "
+        "Share (with the child's permission) one page with parents each fortnight to reinforce the message at home.",
+    ),
+]
+
+
+# -----------------------------------------------------------------------------
+# STAFF PDF (with suggested activities appended)
+# -----------------------------------------------------------------------------
+def build_pdf_staff(d) -> bytes:
+    """Wraps build_pdf and appends a 'Suggested Behavioral Activities' section."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table,
+        TableStyle, HRFlowable, PageBreak
+    )
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from io import BytesIO
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                             leftMargin=2.2*cm, rightMargin=2.2*cm,
+                             topMargin=2.5*cm, bottomMargin=2.5*cm)
+
+    INK   = colors.HexColor("#2A2520")
+    BARK  = colors.HexColor("#8B7355")
+    STONE = colors.HexColor("#6B6456")
+    LINEN = colors.HexColor("#F0EBE1")
+    WARM  = colors.HexColor("#FAF8F4")
+    WARM2 = colors.HexColor("#F5F0E8")
+    BORDER= colors.HexColor("#DDD8CE")
+    SAGE  = colors.HexColor("#7A8A72")
+    WHITE = colors.white
+
+    def S(name, **kw):
+        return ParagraphStyle(name, **kw)
+
+    sTitle  = S("AT", fontName="Helvetica-Bold",  fontSize=18, textColor=INK,
+                      leading=24, alignment=TA_CENTER, spaceAfter=4)
+    sSub    = S("AS", fontName="Helvetica",        fontSize=10, textColor=STONE,
+                      leading=14, alignment=TA_CENTER, spaceAfter=10)
+    sHead   = S("AH", fontName="Helvetica-Bold",   fontSize=11, textColor=INK,
+                      leading=15, spaceBefore=6, spaceAfter=3)
+    sDomain = S("AD", fontName="Helvetica-Oblique",fontSize=9,  textColor=BARK,
+                      leading=13, spaceAfter=4)
+    sBody   = S("AB", fontName="Helvetica",         fontSize=9.5, textColor=INK,
+                      leading=15, spaceAfter=4)
+    sFooter = S("AF", fontName="Helvetica-Oblique", fontSize=7.5, textColor=STONE,
+                      alignment=TA_CENTER)
+    sNum    = S("AN2",fontName="Helvetica-Bold",    fontSize=22, textColor=BARK,
+                      leading=26, spaceAfter=0)
+
+    def hr(c=BARK, t=0.8):
+        return HRFlowable(width="100%", thickness=t, color=c, spaceAfter=5, spaceBefore=5)
+    def sp(h=0.25):
+        return Spacer(1, h*cm)
+
+    # Reuse the main plan story from build_pdf, then append activities
+    # We rebuild here using build_pdf as source but add the activities section
+    # First get the main PDF bytes and then append — but since ReportLab doesn't
+    # support merging easily, we rebuild fully: call build_pdf internals inline.
+
+    today = datetime.now().strftime("%d %B %Y")
+    nursery = d.get("nursery_name") or "Nursery"
+    footer_t = d.get("footer_text") or "Confidential — For internal use only."
+    child = d.get("child_name") or "—"
+
+    # Get main plan story by calling the internal build
+    main_bytes = build_pdf(d)
+
+    # Now build the activities-only supplement and merge with PyPDF
+    act_buf = BytesIO()
+    act_doc = SimpleDocTemplate(act_buf, pagesize=A4,
+                                 leftMargin=2.2*cm, rightMargin=2.2*cm,
+                                 topMargin=2.5*cm, bottomMargin=2.5*cm)
+
+    story = []
+    story += [
+        Paragraph("Suggested Behavioral Activities", sTitle),
+        Paragraph(f"Session Resource Supplement — {child} — {nursery}", sSub),
+        sp(0.2), hr(INK, 1.5), sp(0.3),
+        Paragraph(
+            "The following activities are recommended as structured, evidence-informed tools to support "
+            "the skills targeted in this behaviour support plan. Each activity is designed to be engaging, "
+            "developmentally appropriate, and adaptable to the child's current level. Activities should be "
+            "selected based on the child's focus areas and may be used across multiple sessions.",
+            sBody),
+        sp(0.4),
+    ]
+
+    for i, (name, domain, description) in enumerate(SUGGESTED_ACTIVITIES, 1):
+        act_row = [[
+            Paragraph(str(i), sNum),
+            [Paragraph(name, sHead),
+             Paragraph(f"Target Area: {domain}", sDomain),
+             Paragraph(description, sBody)]
+        ]]
+        act_tbl = Table(act_row, colWidths=[1.2*cm, 15.0*cm])
+        act_tbl.setStyle(TableStyle([
+            ("BACKGROUND",   (0,0),(-1,-1), LINEN if i % 2 == 1 else WARM2),
+            ("LINEAFTER",    (0,0),(0,0), 3, BARK),
+            ("TOPPADDING",   (0,0),(-1,-1), 10),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 10),
+            ("LEFTPADDING",  (0,0),(-1,-1), 10),
+            ("VALIGN",       (0,0),(-1,-1), "TOP"),
+            ("BOX",          (0,0),(-1,-1), 0.4, BORDER),
+        ]))
+        story += [act_tbl, sp(0.2)]
+
+    story += [
+        sp(0.5), hr(STONE, 0.5),
+        Paragraph(f"{footer_t}  |  Behavioral Activities Supplement  |  Generated: {today}  |  {nursery}", sFooter),
+    ]
+
+    def add_page_num(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFont("Helvetica", 8)
+        canvas_obj.setFillColor(STONE)
+        canvas_obj.drawRightString(A4[0] - 2.2*cm, 1.2*cm, f"Page {canvas_obj.getPageNumber()}")
+        canvas_obj.restoreState()
+
+    act_doc.build(story, onFirstPage=add_page_num, onLaterPages=add_page_num)
+    act_bytes = act_buf.getvalue()
+
+    # Merge: main plan + activities supplement
+    try:
+        from pypdf import PdfWriter, PdfReader
+        writer = PdfWriter()
+        for src in [main_bytes, act_bytes]:
+            reader = PdfReader(BytesIO(src))
+            for page in reader.pages:
+                writer.add_page(page)
+        merged = BytesIO()
+        writer.write(merged)
+        return merged.getvalue()
+    except Exception:
+        # Fallback: just return the main PDF if merge fails
+        return main_bytes
+
+
+# -----------------------------------------------------------------------------
+# PARENT-FRIENDLY PDF
+# -----------------------------------------------------------------------------
+def build_pdf_parent(d) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table,
+        TableStyle, HRFlowable, Image as RLImage
+    )
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+    from io import BytesIO
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                             leftMargin=2.5*cm, rightMargin=2.5*cm,
+                             topMargin=2.5*cm, bottomMargin=2.5*cm)
+
+    INK   = colors.HexColor("#2A2520")
+    BARK  = colors.HexColor("#8B7355")
+    STONE = colors.HexColor("#6B6456")
+    LINEN = colors.HexColor("#F0EBE1")
+    WARM  = colors.HexColor("#FAF8F4")
+    WARM2 = colors.HexColor("#F5F0E8")
+    BORDER= colors.HexColor("#DDD8CE")
+    SAGE  = colors.HexColor("#7A8A72")
+    WHITE = colors.white
+    SAGE_BG = colors.HexColor("#EEF2EC")
+
+    def S(name, **kw):
+        return ParagraphStyle(name, **kw)
+
+    sTitle  = S("PT", fontName="Helvetica-Bold",  fontSize=22, textColor=INK,
+                      leading=28, alignment=TA_CENTER, spaceAfter=6)
+    sSub    = S("PS", fontName="Helvetica",        fontSize=11, textColor=STONE,
+                      leading=16, alignment=TA_CENTER, spaceAfter=4)
+    sLead   = S("PL", fontName="Helvetica",        fontSize=11, textColor=INK,
+                      leading=18, spaceAfter=8, alignment=TA_JUSTIFY)
+    sSecHdr = S("PH", fontName="Helvetica-Bold",   fontSize=13, textColor=BARK,
+                      leading=18, spaceBefore=14, spaceAfter=6)
+    sBody   = S("PB", fontName="Helvetica",         fontSize=10.5, textColor=INK,
+                      leading=17, spaceAfter=6, alignment=TA_JUSTIFY)
+    sBullet = S("PBu",fontName="Helvetica",         fontSize=10.5, textColor=INK,
+                      leading=17, leftIndent=14, spaceAfter=4)
+    sEmph   = S("PE", fontName="Helvetica-Bold",    fontSize=10.5, textColor=BARK,
+                      leading=17, spaceAfter=4)
+    sSmall  = S("PSm",fontName="Helvetica",         fontSize=9,  textColor=STONE, leading=13)
+    sFooter = S("PF", fontName="Helvetica-Oblique", fontSize=8,  textColor=STONE,
+                      alignment=TA_CENTER)
+    sBox    = S("PBx",fontName="Helvetica",         fontSize=10.5, textColor=INK,
+                      leading=17, leftIndent=6, spaceAfter=4, alignment=TA_JUSTIFY)
+
+    def hr(c=BARK, t=0.8):
+        return HRFlowable(width="100%", thickness=t, color=c, spaceAfter=6, spaceBefore=6)
+    def sp(h=0.3):
+        return Spacer(1, h*cm)
+
+    today    = datetime.now().strftime("%d %B %Y")
+    child    = d.get("child_name") or "Your child"
+    nursery  = d.get("nursery_name") or "Nursery"
+    therapist= d.get("therapist_name") or "the assigned behavioral therapist"
+    dob_str  = d["date_of_birth"].strftime("%d %B %Y") if d.get("date_of_birth") else "—"
+    age      = d.get("age", "—")
+    group    = d.get("class_group", "—")
+    start    = d["start_date"].strftime("%d %B %Y") if d.get("start_date") else "—"
+    freq     = d.get("session_frequency", "—")
+    spm      = str(d.get("sessions_per_month", "—"))
+    pattern  = d.get("pattern", "")
+    notes    = d.get("notes", "")
+    all_behaviors = d.get("behaviors", []) + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
+    skills   = d.get("skills", [])
+    footer_t = d.get("footer_text") or "Confidential — For family use."
+
+    story = []
+
+    # -- Header ----------------------------------------------------------------
+    story += [
+        Paragraph(f"Your Child's Support Plan", sTitle),
+        Paragraph(f"{nursery} — Individual Behaviour Support Programme", sSub),
+        sp(0.15), hr(INK, 1.5), sp(0.3),
+    ]
+
+    # Logo
+    if d.get("logo_bytes"):
+        try:
+            img = RLImage(BytesIO(d["logo_bytes"]), width=3*cm, height=1.8*cm, kind="proportional")
+            img.hAlign = "CENTER"
+            story += [img, sp(0.2)]
+        except Exception:
+            pass
+
+    # Warm intro
+    story += [
+        Paragraph(
+            f"Dear Parent / Guardian,",
+            S("PG", fontName="Helvetica-Bold", fontSize=11, textColor=INK, spaceAfter=6)),
+        Paragraph(
+            f"We are so glad to share this with you. This document has been prepared to keep you fully informed "
+            f"about the individual support programme we have put in place for <b>{child}</b>. "
+            f"It is written in plain language — no jargon — so that you can understand exactly what we are doing, "
+            f"why we are doing it, and how you can be part of {child}'s journey.",
+            sLead),
+        Paragraph(
+            f"Please know that this plan is a sign of our care and commitment, not a cause for worry. "
+            f"Many children benefit enormously from a little extra, focused support during their early years. "
+            f"We are here as partners every step of the way.",
+            sLead),
+        sp(0.2),
+    ]
+
+    # Child info table
+    info_data = [
+        [Paragraph("<b>Child</b>", sSmall),       Paragraph(child, sBody),
+         Paragraph("<b>Date of Birth</b>", sSmall), Paragraph(dob_str, sBody)],
+        [Paragraph("<b>Age</b>", sSmall),          Paragraph(age, sBody),
+         Paragraph("<b>Class / Group</b>", sSmall), Paragraph(group, sBody)],
+        [Paragraph("<b>Therapist</b>", sSmall),    Paragraph(therapist, sBody),
+         Paragraph("<b>Programme Start</b>", sSmall), Paragraph(start, sBody)],
+        [Paragraph("<b>Sessions / Month</b>", sSmall), Paragraph(spm, sBody),
+         Paragraph("<b>Session Frequency</b>", sSmall), Paragraph(freq, sBody)],
+    ]
+    info_tbl = Table(info_data, colWidths=[3.5*cm, 5.5*cm, 3.5*cm, 4.0*cm])
+    info_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(0,-1), LINEN),
+        ("BACKGROUND",    (2,0),(2,-1), LINEN),
+        ("ROWBACKGROUNDS",(0,0),(-1,-1), [WARM, WARM2, WARM, WARM2]),
+        ("GRID",          (0,0),(-1,-1), 0.4, BORDER),
+        ("TOPPADDING",    (0,0),(-1,-1), 6),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+        ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+    ]))
+    story += [info_tbl, sp(0.5)]
+
+    # -- Section 1: What is this plan? ----------------------------------------
+    story += [Paragraph("What Is This Support Plan?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+    story += [
+        Paragraph(
+            f"This is an <b>Individual Behaviour Support Plan</b> — a personalised programme designed specifically "
+            f"for <b>{child}</b>. It brings together structured sessions, targeted skill-building, and close teamwork "
+            f"between our team and your family.",
+            sBody),
+        Paragraph(
+            f"<b>It is important to understand:</b> this plan is <i>not</i> a diagnosis. It does not mean something "
+            f"is 'wrong' with {child}. It simply means we have noticed some areas where a little extra support "
+            f"could make a big difference — and we want to provide that support in the most effective way possible.",
+            sBody),
+        sp(0.2),
+    ]
+
+    # -- Section 2: What behaviors are we focusing on? -------------------------
+    story += [Paragraph("What Are We Working On?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+    story += [
+        Paragraph(
+            f"Our team has observed the following behaviours that we would like to support {child} with. "
+            f"Please remember — these behaviours are <i>not</i> 'bad behaviour'. They are {child}'s way of telling "
+            f"us that something feels hard right now. Our job is to help build the skills to handle those "
+            f"hard moments better:",
+            sBody),
+    ]
+    if all_behaviors:
+        for b in all_behaviors:
+            story.append(Paragraph(f"• {b}", sBullet))
+    else:
+        story.append(Paragraph("• To be specified with the team.", sBullet))
+
+    freq_label = d.get("frequency", "moderate").capitalize()
+    int_label  = d.get("intensity", "moderate").capitalize()
+    story += [
+        sp(0.1),
+        Paragraph(f"<b>How often:</b> {freq_label} &nbsp;&nbsp; <b>Intensity:</b> {int_label}", sBody),
+    ]
+    if pattern:
+        story += [
+            Paragraph(f"<b>When does it tend to happen?</b> {pattern}", sBody),
+        ]
+    story.append(sp(0.3))
+
+    # -- Section 3: What skills are we building? -------------------------------
+    story += [Paragraph("What Skills Are We Building?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+    story += [
+        Paragraph(
+            f"Our sessions are designed to build specific skills that will help {child} feel more confident, "
+            f"calm, and capable. Here is what we are working on and what it means:",
+            sBody),
+    ]
+    if skills:
+        for sk in skills:
+            if sk in SKILL_DETAILS:
+                _, body = SKILL_DETAILS[sk]
+                story += [
+                    Paragraph(f"✦  {sk}", sEmph),
+                    Paragraph(body, sBox),
+                    sp(0.1),
+                ]
+    else:
+        story.append(Paragraph("Skills will be confirmed in your first review meeting.", sBody))
+    story.append(sp(0.2))
+
+    # -- Section 4: What do sessions look like? --------------------------------
+    story += [Paragraph("What Happens in a Session?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+    story += [
+        Paragraph(
+            f"Sessions are warm, playful, and child-led as much as possible. {child} will not know they are in "
+            f"a 'behaviour session' — they will just be playing and connecting with {therapist}. "
+            f"Sessions happen <b>{freq}</b> ({spm} times per month).",
+            sBody),
+    ]
+    for t_, b_ in ACTIVITY_ITEMS:
+        story.append(Paragraph(f"• <b>{t_}:</b> {b_}", sBullet))
+    story.append(sp(0.3))
+
+    # -- Section 5: How will we know it's working? ----------------------------
+    story += [Paragraph("How Will We Know It's Working?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+    story += [
+        Paragraph(
+            f"Progress in early childhood is rarely a straight line — and that is completely normal. "
+            f"We will look for small, meaningful signs that {child} is growing. Here is what to watch for:",
+            sBody),
+    ]
+    for _, t_, b_ in PROGRESS_CARDS:
+        story.append(Paragraph(f"• <b>{t_}:</b> {b_}", sBullet))
+    story.append(sp(0.3))
+
+    # -- Section 6: How can YOU help at home? ----------------------------------
+    story += [Paragraph("How Can You Help at Home?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+
+    home_tips = [
+        ("Stay consistent", f"Try to use the same calm, non-reactive approach when {child} struggles at home as we use here. "
+                            "Consistency between home and nursery is one of the most powerful things you can do."),
+        ("Name feelings out loud", f"When {child} seems upset, try saying 'I can see you feel frustrated' rather than 'stop that'. "
+                                   "This builds emotional vocabulary and makes feelings feel safe to express."),
+        ("Celebrate the small wins", "Every time you notice {child} waiting, communicating, or calming down — even a little — "
+                                     "name it and celebrate it. 'I noticed you took a deep breath — that was brilliant.'"),
+        ("Tell us what you notice", "You know your child best. If you see something at home — a new trigger, a new strategy that "
+                                    "works, or a breakthrough — please share it with us. Your insights shape the programme."),
+        ("Keep routines predictable", "Many children who struggle with regulation find surprise and change very hard. "
+                                      "Where possible, give {child} advance notice of any changes to routine."),
+        ("Ask for support too", "This can feel a lot for parents. Please reach out to us any time you need guidance, "
+                                "reassurance, or just a conversation."),
+    ]
+    for title, tip in home_tips:
+        tip_filled = tip.replace("{child}", child)
+        story.append(Paragraph(f"✦  <b>{title}</b>", sEmph))
+        story.append(Paragraph(tip_filled, sBox))
+        story.append(sp(0.1))
+    story.append(sp(0.2))
+
+    # -- Section 7: Who to contact --------------------------------------------
+    story += [Paragraph("Your Team", sSecHdr), hr(BARK, 0.5), sp(0.1)]
+    contact_data = [
+        [Paragraph("<b>🏫 Nursery Team</b>", sEmph),
+         Paragraph("<b>👩‍🏫 Behavioral Therapist</b>", sEmph),
+         Paragraph("<b>👨‍👩‍👧 You — the Family</b>", sEmph)],
+        [Paragraph("The nursery team will keep you informed and support the plan throughout the day.", sSmall),
+         Paragraph(f"{therapist} leads the sessions and will provide you with regular written updates.", sSmall),
+         Paragraph(f"Your voice matters. Regular review meetings will include your feedback and observations.", sSmall)],
+    ]
+    ct = Table(contact_data, colWidths=[5.2*cm, 5.2*cm, 5.2*cm])
+    ct.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,0), INK),
+        ("TEXTCOLOR",     (0,0),(-1,0), WHITE),
+        ("BACKGROUND",    (0,1),(-1,-1), LINEN),
+        ("GRID",          (0,0),(-1,-1), 0.4, BORDER),
+        ("TOPPADDING",    (0,0),(-1,-1), 8),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+        ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ("VALIGN",        (0,0),(-1,-1), "TOP"),
+    ]))
+    story += [ct, sp(0.3)]
+
+    # Notes
+    if notes and notes.strip():
+        story += [
+            Paragraph("<b>Additional Notes from the Team</b>",
+                      S("PN", fontName="Helvetica-Bold", fontSize=10.5, textColor=BARK,
+                        spaceBefore=8, spaceAfter=4)),
+            Paragraph(notes, sBody),
+            sp(0.2),
+        ]
+
+    # Closing warm message
+    closing_row = [[Paragraph(
+        f"We are proud to support {child} and grateful to have you as a partner in this journey. "
+        f"Together, we can make a real difference. Please don't hesitate to reach out — our door is always open.",
+        S("PC2", fontName="Helvetica-Oblique", fontSize=10.5, textColor=STONE, leading=17, alignment=TA_CENTER))]]
+    ct2 = Table(closing_row, colWidths=[15.5*cm])
+    ct2.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,-1), SAGE_BG),
+        ("BOX",           (0,0),(-1,-1), 0.5, SAGE),
+        ("TOPPADDING",    (0,0),(-1,-1), 14),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 14),
+        ("LEFTPADDING",   (0,0),(-1,-1), 16),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 16),
+    ]))
+    story += [ct2, sp(0.4)]
+
+    # Footer
+    story += [
+        hr(STONE, 0.5),
+        Paragraph(f"{footer_t}  |  Prepared for family of {child}  |  {today}  |  {nursery}", sFooter),
+    ]
+
+    def add_page_num(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFont("Helvetica", 8)
+        canvas_obj.setFillColor(STONE)
+        canvas_obj.drawRightString(A4[0] - 2.5*cm, 1.2*cm, f"Page {canvas_obj.getPageNumber()}")
+        canvas_obj.restoreState()
+
+    doc.build(story, onFirstPage=add_page_num, onLaterPages=add_page_num)
+    return buf.getvalue()
+
+
+
 def build_docx(d) -> bytes:
     from docx import Document as DocxDoc
     from docx.shared import Pt, Cm, RGBColor, Inches
@@ -1388,9 +1930,21 @@ def render_sidebar() -> dict:
         st.markdown("### Child Information")
         child_name  = st.text_input("Child Name *", placeholder="e.g. Liam Hassan",
                                      key="child_name")
-        age         = st.text_input("Age", placeholder="e.g. 3 years 4 months", key="age")
+        dob         = st.date_input("Date of Birth", value=date(date.today().year - 3, date.today().month, 1),
+                                     key="date_of_birth", min_value=date(date.today().year-12,1,1),
+                                     max_value=date.today())
+        # Auto-calculate age
+        today_d = date.today()
+        years = today_d.year - dob.year - ((today_d.month, today_d.day) < (dob.month, dob.day))
+        months_total = (today_d.year * 12 + today_d.month) - (dob.year * 12 + dob.month)
+        months = months_total % 12
+        age = f"{years} year{'s' if years != 1 else ''} {months} month{'s' if months != 1 else ''}"
+        st.caption(f"🎂 Age: **{age}**")
+
         class_group = st.text_input("Class / Group", placeholder="e.g. Sunflower Group",
                                      key="class_group")
+        therapist_name = st.text_input("Behavioral Therapist Name", placeholder="e.g. Sara Ahmed",
+                                        key="therapist_name")
         start_date  = st.date_input("Programme Start Date", value=date.today(), key="start_date")
 
         st.markdown("### Behavioral Concerns")
@@ -1476,8 +2030,10 @@ def render_sidebar() -> dict:
 
         return {
             "child_name":        child_name,
+            "date_of_birth":     dob,
             "age":               age,
             "class_group":       class_group,
+            "therapist_name":    therapist_name,
             "start_date":        start_date,
             "behaviors":         behaviors,
             "custom_behavior":   custom_behavior,
@@ -1630,7 +2186,7 @@ def main():
         <div class="app-header-mark">✦</div>
         <div>
             <div class="app-header-title">Individual Behavior Support Plan Generator</div>
-            <div class="app-header-sub">Fill in the sidebar → preview updates live → export PDF or Word</div>
+            <div class="app-header-sub">Fill in the sidebar → preview updates live → export Staff PDF or Parent PDF</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1645,39 +2201,41 @@ def main():
         # Export section
         st.markdown("""
         <div class="export-box">
-            <div class="export-title">Export Document</div>
+            <div class="export-title">Export Documents</div>
         </div>
         """, unsafe_allow_html=True)
 
-        col_pdf, col_docx = st.columns(2)
+        col_pdf, col_parent = st.columns(2)
 
         with col_pdf:
             try:
-                pdf_bytes = build_pdf(d)
-                filename_pdf = f"BehaviorPlan_{d['child_name'].replace(' ','_')}.pdf"
+                pdf_bytes = build_pdf_staff(d)
+                filename_pdf = f"BehaviorPlan_Staff_{d['child_name'].replace(' ','_')}.pdf"
                 st.download_button(
-                    label="⬇  Download PDF",
+                    label="⬇  Staff PDF (+ Activities)",
                     data=pdf_bytes,
                     file_name=filename_pdf,
                     mime="application/pdf",
                     use_container_width=True,
+                    help="Full professional report with suggested behavioral activities for sessions",
                 )
             except Exception as e:
-                st.error(f"PDF generation error: {e}")
+                st.error(f"Staff PDF error: {e}")
 
-        with col_docx:
+        with col_parent:
             try:
-                docx_bytes = build_docx(d)
-                filename_docx = f"BehaviorPlan_{d['child_name'].replace(' ','_')}.docx"
+                parent_bytes = build_pdf_parent(d)
+                filename_parent = f"BehaviorPlan_Parent_{d['child_name'].replace(' ','_')}.pdf"
                 st.download_button(
-                    label="⬇  Download Word (.docx)",
-                    data=docx_bytes,
-                    file_name=filename_docx,
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    label="⬇  Parent-Friendly PDF",
+                    data=parent_bytes,
+                    file_name=filename_parent,
+                    mime="application/pdf",
                     use_container_width=True,
+                    help="Warm, clear summary written for parents — no jargon",
                 )
             except Exception as e:
-                st.error(f"DOCX generation error: {e}")
+                st.error(f"Parent PDF error: {e}")
 
     else:
         st.markdown("""
