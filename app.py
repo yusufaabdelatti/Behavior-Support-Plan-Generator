@@ -2263,15 +2263,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
 
-
-if __name__ == "__main__":
-    main()
-
-
-# =============================================================================
-# ACTIVITY SESSION PACK GENERATOR
-# =============================================================================
-
 def build_activity_pack(d) -> bytes:
     import math, tempfile, os
     from io import BytesIO
@@ -3226,3 +3217,7 @@ def build_activity_pack(d) -> bytes:
         try: os.unlink(tf)
         except: pass
     return out_buf.getvalue()
+
+
+if __name__ == "__main__":
+    main()
