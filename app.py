@@ -1977,18 +1977,18 @@ def render_sidebar() -> dict:
                 skills.append(s)
 
         st.markdown("### Programme Details")
-        col3, col4 = st.columns(2)
-        with col3:
-            sessions_per_month = st.number_input("Sessions / month", min_value=1,
-                                                   max_value=31, value=4,
-                                                   key="sessions_per_month")
-        with col4:
-            session_frequency = st.selectbox(
-                "Frequency",
-                ["Once per week","Twice per week","Three times per week",
-                 "Daily","Biweekly","As needed"],
-                key="session_frequency",
-            )
+        session_frequency = st.selectbox(
+            "Sessions per week",
+            ["1 session per week", "2 sessions per week", "3 sessions per week"],
+            key="session_frequency",
+        )
+        _freq_map = {
+            "1 session per week": 4,
+            "2 sessions per week": 8,
+            "3 sessions per week": 12,
+        }
+        sessions_per_month = _freq_map[session_frequency]
+        st.caption(f"📅 Total sessions planned per month: **{sessions_per_month}**")
         notes = st.text_area("Additional notes (optional)",
                               placeholder="Context, preferences, observations…",
                               key="notes", height=80)
@@ -2237,6 +2237,21 @@ def main():
             except Exception as e:
                 st.error(f"Parent PDF error: {e}")
 
+        st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+        try:
+            pack_bytes = build_activity_pack(d)
+            filename_pack = f"ActivitySessionPack_{d['child_name'].replace(' ','_')}.pdf"
+            st.download_button(
+                label="⬇  Activity Session Pack (PDF)",
+                data=pack_bytes,
+                file_name=filename_pack,
+                mime="application/pdf",
+                use_container_width=True,
+                help="Full activity session pack — conduct guides, tracking sheets, parent sheets, token board",
+            )
+        except Exception as e:
+            st.error(f"Activity Pack error: {e}")
+
     else:
         st.markdown("""
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -2251,3 +2266,963 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# =============================================================================
+# ACTIVITY SESSION PACK GENERATOR
+# =============================================================================
+
+def build_activity_pack(d) -> bytes:
+    import math, tempfile, os
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        HRFlowable, PageBreak
+    )
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib.colors import HexColor
+    from pypdf import PdfWriter, PdfReader
+
+    C_TEAL         = HexColor("#2E7D8C")
+    C_TEAL_LIGHT   = HexColor("#E8F4F6")
+    C_GOLD         = HexColor("#D4A017")
+    C_GOLD_LIGHT   = HexColor("#FDF6E3")
+    C_CORAL        = HexColor("#E05C5C")
+    C_CORAL_LIGHT  = HexColor("#FDF0F0")
+    C_GREEN        = HexColor("#3A7D44")
+    C_GREEN_LIGHT  = HexColor("#EAF4EB")
+    C_PURPLE       = HexColor("#6A4C93")
+    C_PURPLE_LIGHT = HexColor("#F2EEF8")
+    C_ORANGE       = HexColor("#C0622A")
+    C_ORANGE_LIGHT = HexColor("#FDF0E8")
+    C_BLUE         = HexColor("#2A5C8C")
+    C_BLUE_LIGHT   = HexColor("#E8EFF8")
+    C_DARK         = HexColor("#1C2B3A")
+    C_MID_GREY     = HexColor("#6B7C93")
+    C_LIGHT_GREY   = HexColor("#F5F7FA")
+    C_WHITE        = colors.white
+    C_BORDER       = HexColor("#D0D8E4")
+
+    child       = d.get("child_name") or "Child"
+    therapist   = d.get("therapist_name") or "Therapist"
+    nursery     = d.get("nursery_name") or "Nursery"
+    class_group = d.get("class_group") or "—"
+    age         = d.get("age") or "—"
+    start_str   = d["start_date"].strftime("%d %B %Y") if d.get("start_date") else "—"
+    freq_label  = d.get("session_frequency") or "—"
+    sessions    = int(d.get("sessions_per_month") or 4)
+    skills      = d.get("skills") or []
+    behaviors   = (d.get("behaviors") or []) + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
+    footer_t    = d.get("footer_text") or "Confidential — For therapist and family use only."
+    today_str   = datetime.now().strftime("%d %B %Y")
+
+    ACTIVITY_LIBRARY = {
+      "Emotional Regulation": [{
+        "name": "Feelings Monster Bag",
+        "skill_label": "Emotional Regulation",
+        "color": C_TEAL, "light": C_TEAL_LIGHT,
+        "objective": "{child} will learn to identify, name, and physically express core emotions (happy, sad, angry, scared) using visual cards and puppet prompts. By the end of the session series, {child} will spontaneously label an emotion when asked or when naturally occurring during the session.",
+        "materials": [
+          ("Primary Tools","Soft bag or box, emotion picture cards (x4-6), small hand puppets (optional), mirror"),
+          ("Substitutes","Plastic bag + laminated drawings; hand-drawn cards; small toys as characters; camera app as mirror"),
+          ("Reinforcers","Token board + preferred stickers or stamps identified with the family"),
+        ],
+        "steps": [
+          ("Set up (before session)","Place the bag on the table with emotion cards inside. Have token board visible. Prepare mirror if available."),
+          ("Introduce the bag (2 min)","Say: 'I have a special feelings bag today! There are some characters hiding inside.' Build anticipation before opening."),
+          ("Therapist models first (3 min)","Pull out 'happy'. Make a big happy face. Say 'This one is HAPPY — look at my face!' Invite {child} to copy. Award token with labeled praise."),
+          ("Child's turn (8 min)","{child} pulls cards one at a time. For each: ask 'What feeling is this?' model if needed, ask them to make the face, ask 'When do you feel ___?' Accept pointing, nodding, or one word."),
+          ("What helps? (4 min)","For 'angry' and 'sad', show a visual with 2-3 coping options. Ask 'What can you do?' Coach toward the visual. This is replacement behaviour rehearsal."),
+          ("Wrap-up (3 min)","Recap: 'Today we found feelings! You were amazing.' Count tokens. Let {child} pack cards back."),
+        ],
+        "adapt": [
+          ("Refuses to engage","Therapist plays alone and narrates. Curiosity usually draws child in within 2-3 minutes."),
+          ("Becomes dysregulated","Pause. Offer a brief movement break. Return to the bag calmly."),
+          ("Cannot name emotions","Switch to matching: 'Which face looks like THIS face?' rather than open naming."),
+          ("Short attention span","Use only 2-3 cards per session. Add novelty with a puppet voice."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Emotion cards identified correctly (# / total)","_______  out of  _______"),
+          ("Emotion labelling modality","&#9744; Verbal  &#9744; Pointed  &#9744; Nodded  &#9744; No response"),
+          ("Face mirroring quality","&#9744; Spontaneous  &#9744; Prompted  &#9744; Refused"),
+          ("Response to 'What helps?' prompt","&#9744; Verbal  &#9744; Pointed to visual  &#9744; No response"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Intensity of escalation (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5  &#9744; N/A"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Replacement behavior used?","&#9744; Spontaneous  &#9744; Prompted  &#9744; None"),
+          ("Tokens earned","_______"),
+          ("Prompt level","&#9744; Independent  &#9744; Gestural  &#9744; Verbal  &#9744; Full physical"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} played a feelings game using our special Feelings Bag! We explored emotion cards and practised making different faces. We also began talking about what helps when we feel a big feeling.",
+        "parent_why": "When children can name their feelings, they are far less likely to express them through challenging behaviour. Naming is the very first step toward managing emotions and is foundational to everything else in this programme.",
+        "parent_tips": [
+          "When {child} shows a strong emotion, gently name it: 'It looks like you are feeling angry right now.' You do not need to fix it - just name it.",
+          "Make it a game: pull funny faces together and ask 'What feeling is this?'",
+          "If {child} uses any feeling word, even just 'mad', celebrate it immediately.",
+          "Simple emotion cards on the fridge work well for continued practice at home.",
+        ],
+        "substitutes": [
+          "Bag: any box, envelope, or pillowcase",
+          "Emotion cards: hand-drawn faces on paper, printed A4 sheet, magazine cut-outs",
+          "Mirror: phone camera app, or skip entirely",
+          "Puppets: any small toys used as 'characters'",
+        ],
+      }],
+      "Impulse Control": [{
+        "name": "Red Light, Green Light",
+        "skill_label": "Impulse Control (Inhibitory Control)",
+        "color": C_GOLD, "light": C_GOLD_LIGHT,
+        "objective": "{child} will develop the neurological pause between impulse and action by practising deliberate stopping of a preferred movement in response to a clear visual signal. Progress is measured by reduction in impulse errors and observable increase in latency between signal and response.",
+        "materials": [
+          ("Primary Tools","Large red card, large green card, yellow card (advanced rounds), token board"),
+          ("Substitutes","Red and green paper, plates, blocks, or hats - any two strongly contrasting objects; yellow introduced only from session 3+"),
+          ("Preferred action","Ball rolling, marching, clapping, jumping - identify with child at session start"),
+          ("Reinforcers","Token board + preferred stickers or stamps"),
+        ],
+        "steps": [
+          ("Setup and motivation check (2 min)","Show the two cards. Ask what {child} wants to do on 'green' - offer 2 choices. This creates buy-in and ensures movement is intrinsically motivating."),
+          ("Therapist models (2 min)","Therapist goes first: show green - start jumping; show red - FREEZE. Make it fun and exaggerated. Let {child} be card-holder for one round."),
+          ("Child plays, slow pace (5 min)","Switch signals slowly every 5-7 seconds. Give warm-up successes early. Award token every successful stop. Narrate: 'RED - and you STOPPED! Wow!'"),
+          ("Increase pace (8 min)","Gradually reduce green intervals. Introduce unexpected red signals. Advanced: introduce yellow (slow down). Track impulse errors neutrally."),
+          ("Child as card-holder (3 min)","Give {child} the cards; therapist is the mover. Builds turn-taking and consolidates rule understanding."),
+          ("Wrap-up (2 min)","Count tokens. Review: 'You stopped your body many times today!'"),
+        ],
+        "adapt": [
+          ("Will not stop at all","Reduce green interval drastically to create early success."),
+          ("Becomes frustrated","Offer card-holder role. Redirect frustration into leadership within the activity."),
+          ("Loses interest","Change movement: silly walking, animal movements, or drumming on the table."),
+          ("Limited space","Seated version: hands on knees = stop; hands clapping = go."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Movement chosen this session","_____________________________"),
+          ("Total red signals given","_______"),
+          ("Successful stops (# / total)","_______  out of  _______"),
+          ("Latency to stop","&#9744; Immediate  &#9744; 1-2 sec delay  &#9744; 3+ sec  &#9744; Did not stop"),
+          ("Impulse errors (moved on red)","_______  errors"),
+          ("Yellow card introduced?","&#9744; Yes  &#9744; No - not yet"),
+          ("Response to correction","&#9744; Accepted calmly  &#9744; Resisted  &#9744; Escalated"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Intensity of escalation (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5  &#9744; N/A"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Tokens earned","_______"),
+          ("Prompt level","&#9744; Independent  &#9744; Gestural  &#9744; Verbal  &#9744; Full physical"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} played a movement game where they had to move on the green card and freeze completely on the red card. A classic game with a very serious developmental purpose!",
+        "parent_why": "The ability to stop your body on purpose is one of the earliest and most important forms of self-control. This game trains the exact part of the brain that helps children pause before reacting impulsively.",
+        "parent_tips": [
+          "Play a version at home during any routine: Freeze! while walking to the table, getting dressed, or in the garden.",
+          "Use 'red light' as a calm, playful signal when you need {child} to pause - not a command, but a shared game cue.",
+          "When they stop, name what they did: 'You stopped your body! That was such good brain work.'",
+          "Even one successful freeze deserves a big celebration. The pause is the goal.",
+        ],
+        "substitutes": [
+          "Red/green cards: coloured plates, cups, hats, blocks, or scarves",
+          "Open space: seated hand version (hands up/down) if space is limited",
+          "Yellow card: simply say 'slow down' as a verbal cue instead",
+        ],
+      }],
+      "Frustration Tolerance": [{
+        "name": "The Waiting Tower",
+        "skill_label": "Frustration Tolerance",
+        "color": C_GREEN, "light": C_GREEN_LIGHT,
+        "objective": "{child} will tolerate brief, structured waiting periods during a preferred activity without escalating to challenging behaviour. Waiting duration is systematically increased across sessions, and verbal expression of the wait is explicitly trained as the replacement behaviour.",
+        "materials": [
+          ("Primary Tools","Building blocks (DUPLO or wooden), sand timer or visual countdown, token board"),
+          ("Substitutes","Any stackable items (cups, boxes, soft cubes); count aloud or clap rhythm as timer; a drawn number line to cross off"),
+          ("No blocks?","Puzzle, threading beads, or any structured turn-taking craft - the waiting mechanic is the core"),
+          ("Reinforcers","Token board + 2-minute free play reward at tower completion"),
+        ],
+        "steps": [
+          ("Setup (before session)","Set up blocks and place sand timer visibly. Decide starting wait duration from previous session data (5 seconds if first session)."),
+          ("Introduce the game (2 min)","'We are building a tower together! But there is a rule - we take turns. When the sand runs out, it is your turn.' Let {child} flip the timer once."),
+          ("Therapist goes first (2 min)","Therapist places first block. Flips timer. Narrates the wait. First few turns should be very short to build confidence."),
+          ("Structured turn-taking (12 min)","Continue building, alternating. Gradually extend timer. Every successful wait = token + specific praise. If {child} says 'my turn soon' spontaneously - bonus token."),
+          ("Tower completion reward (3 min)","'You built it! You waited so many times!' Let {child} knock it over. Offer 2 min free block play as reward."),
+          ("Wrap-up (3 min)","Record maximum wait achieved. Compare to last session. Share progress with {child} visually."),
+        ],
+        "adapt": [
+          ("Cannot wait at all","Start at 3 seconds. Celebrate even partial waits. Build up one second at a time."),
+          ("Escalates during wait","Shorten the wait immediately. Success is more important than duration."),
+          ("Not interested in blocks","Switch to any preferred turn-taking activity."),
+          ("No timer available","Count together aloud: one, two, three, your turn! Use clapping rhythm."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Target wait time this session","_______  seconds"),
+          ("Total waiting turns given","_______"),
+          ("Successful waits (# / total)","_______  out of  _______"),
+          ("Maximum wait achieved","_______  seconds"),
+          ("Behaviour during wait","&#9744; Calm  &#9744; Restless  &#9744; Verbal protest  &#9744; Physical escalation"),
+          ("Verbal expression during wait","&#9744; Spontaneous ('my turn soon')  &#9744; Prompted  &#9744; None"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Intensity of escalation (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5  &#9744; N/A"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Tokens earned","_______"),
+          ("Previous session max wait / this session max","_______  sec  /  _______  sec"),
+          ("Target for next session","_______  seconds"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} and I built a block tower together with a special rule: we had to take turns, and each person had to wait while the other placed their block. We used a small timer so {child} could see the wait.",
+        "parent_why": "Many challenging moments happen when something {child} wants is briefly out of reach or delayed. Practising tiny, safe waits teaches the brain that waiting is survivable and always leads to something good.",
+        "parent_tips": [
+          "Use a small timer during moments that usually cause friction - waiting for food, a toy, or a turn.",
+          "When {child} waits, name it: 'You waited! That was so grown-up.'",
+          "Keep home waits very short at first - 5 to 10 seconds. Success matters far more than duration.",
+          "If {child} starts to grab or protest, calmly say 'not yet - let us count together.'",
+          "Never extend a wait as a punishment. The timer is a neutral, fair signal.",
+        ],
+        "substitutes": [
+          "Blocks: stacking cups, cardboard boxes, soft toys, books",
+          "Sand timer: count aloud, clap a rhythm, cross numbers off a drawn line",
+          "No table: floor version works equally well",
+        ],
+      }],
+      "Communication Skills": [{
+        "name": "The 'I Need' Communication Board",
+        "skill_label": "Functional Communication",
+        "color": C_PURPLE, "light": C_PURPLE_LIGHT,
+        "objective": "{child} will learn to use a simple picture communication board to express needs, preferences, and distress as a direct replacement for identified challenging behaviours. By the end of the session series, {child} will spontaneously point to or vocalise a card in the natural environment.",
+        "materials": [
+          ("Primary Tools","Printed and laminated picture board (6 cards: I need a break / Help me / No thank you / I am angry / I want / Stop please)"),
+          ("Substitutes","Hand-drawn symbols on card; sticky notes with one word each; a single STOP card if simpler; any object {child} can point to"),
+          ("Role-play props","Favourite toy to place out of reach; a transition bell; a box of items for practice"),
+          ("Reinforcers","Token board + immediate response when card is used (CRITICAL: honours the request - this IS the reinforcer)"),
+        ],
+        "steps": [
+          ("Introduce the board (3 min)","Lay board out. Point to each card and say its name with an exaggerated expression. Let {child} touch and point freely. Do not quiz yet."),
+          ("Model the game (3 min)","Set up a scenario: favourite toy just out of reach. Therapist models pointing to 'I want'. Narrate replacement behaviour explicitly."),
+          ("Role-play scenarios (10 min)","Run 4-6 brief scenarios mirroring real triggers. (1) Toy taken: I want / No thank you. (2) Tidy-up: No thank you / Stop. (3) Too hard: Help me / I need a break. (4) Frustrated: I am angry. Accept any pointing or vocalisation."),
+          ("Generalisation test (4 min)","Without narrating, create a natural frustrating moment. See if {child} reaches for the board without prompting. Wait 5-10 seconds. Record result."),
+          ("Board placement decision (2 min)","Decide with {child} where the board will live. Involvement increases ownership and use."),
+          ("Wrap-up (2 min)","Review: 'Today you used your words instead of [behaviour]. That is such important growing up.'"),
+        ],
+        "adapt": [
+          ("Ignores the board","Reduce to 2 cards only. Less choice = less cognitive load."),
+          ("Cannot point reliably","Use hand-over-hand assistance. Gradually fade physical support."),
+          ("Escalates in role-play","The scenario was too close to a real trigger. Scale back."),
+          ("No laminator","Use a plastic sleeve, contact paper, or a simple drawn A4 sheet in a clear pocket."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Cards used this session","_____________________________"),
+          ("Scenarios presented (# total)","_______"),
+          ("Correct card used (# / total)","_______  out of  _______"),
+          ("Communication modality","&#9744; Verbal  &#9744; Pointed  &#9744; Gestured  &#9744; No response"),
+          ("Prompt level per scenario","&#9744; Independent  &#9744; Modelled  &#9744; Hand-over-hand"),
+          ("Spontaneous generalisation observed?","&#9744; Yes - describe in notes  &#9744; No"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Intensity of escalation (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5  &#9744; N/A"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Tokens earned","_______"),
+          ("Strongest replacement behaviour","_____________________________"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} practised using a special picture board to tell us what they need. We acted out little pretend situations and {child} practised pointing to or saying a card instead of reacting with a tantrum or throwing.",
+        "parent_why": "Most challenging behaviours are {child}'s way of communicating something they cannot yet say in words. This activity gives them a clearer, faster tool so they do not have to use their body to get their message across.",
+        "parent_tips": [
+          "Keep a copy of the board somewhere visible at home - fridge or play area works well.",
+          "When {child} starts to escalate, calmly point to the board: 'Can you show me which one?' - before the peak, not after.",
+          "If {child} points to or touches a card, respond immediately and specifically.",
+          "Never ignore a board use, even a partial one. Even looking at the board deserves acknowledgement.",
+          "If they use a word instead of the board - celebrate it equally. Any functional communication counts.",
+        ],
+        "substitutes": [
+          "Printed board: hand-drawn symbols on A4; sticky notes with one word; a single STOP sign",
+          "Laminator: plastic sleeve, contact paper, or zip-lock bag",
+          "Role-play props: any favourite toy to place out of reach",
+        ],
+      }],
+      "Social Skills": [{
+        "name": "Compliment Catch and Social Stories",
+        "skill_label": "Social Skills and Peer Interaction",
+        "color": C_CORAL, "light": C_CORAL_LIGHT,
+        "objective": "{child} will develop age-appropriate turn-taking, cooperative play, and positive social interaction skills. Spontaneous positive social initiations toward peers are the target outcome.",
+        "materials": [
+          ("Primary Tools","Soft ball, printed social story (1 page illustrated), token board"),
+          ("Substitutes","Any soft object to pass (beanbag, stuffed toy, rolled socks); draw the social story together"),
+          ("Peer involvement","A trusted classmate or nursery adult acts as peer"),
+          ("Reinforcers","Token board + paired activity with the peer as completion reward"),
+        ],
+        "steps": [
+          ("Social story (5 min)","Read the social story together: a character in a situation matching {child}'s real triggers. Ask: 'What did the character do? Was that a good idea?' Keep it light and playful."),
+          ("Model the game (2 min)","Therapist models compliment catch: catch the ball, say one genuine kind thing, throw. Practice once with just therapist and {child}."),
+          ("Play - therapist and child (5 min)","Play 3-4 rounds. Prompt gently if {child} is stuck: 'I notice something nice about you...' Accept any positive statement, however small."),
+          ("Introduce peer (8 min)","Bring in a trusted peer or adult. Run 3-4 rounds with all three. Debrief: 'How did it feel to give and receive a compliment?'"),
+          ("Wrap-up (3 min)","Identify one real moment this week where {child} could use the skill. Role-play briefly. Count tokens."),
+        ],
+        "adapt": [
+          ("Refuses peer interaction","Stay therapist-only. Introduce a puppet as the 'peer' to bridge toward real interaction."),
+          ("Cannot think of a compliment","Offer a menu: 'You could say: nice shirt / good throw / you are funny.'"),
+          ("Social story is too long","Use just one illustration and one sentence. Simplicity is key."),
+          ("Ball causes distraction","Use a beanbag or pass a card instead."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Social story comprehension","&#9744; Understood and discussed  &#9744; Needed support  &#9744; Disengaged"),
+          ("Compliments given (# rounds)","_______"),
+          ("Quality of compliments","&#9744; Spontaneous and genuine  &#9744; Prompted  &#9744; Imitated from menu"),
+          ("Peer present this session?","&#9744; Yes  &#9744; No - therapist only"),
+          ("Social initiation observed?","&#9744; Yes - describe in notes  &#9744; No"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} practised social skills through a compliment catch game and a short social story. We worked on saying kind things, taking turns, and understanding what good interactions look like.",
+        "parent_why": "Social skills are rarely innate - they need to be explicitly taught and practised. By rehearsing them in a safe, structured setting, {child} builds a repertoire of positive social behaviours for use with peers.",
+        "parent_tips": [
+          "Point out positive social moments at home: 'I noticed you shared that - that was really kind.'",
+          "Play simple turn-taking games at home: board games, card games, taking turns in conversation.",
+          "If {child} struggles with a peer situation, ask: 'What could you say instead?'",
+          "Model compliments yourself - children learn social language by hearing it.",
+        ],
+        "substitutes": [
+          "Ball: beanbag, stuffed toy, rolled socks",
+          "Printed social story: draw it together with {child} in the session",
+          "Peer: a trusted nursery adult can fulfil the peer role initially",
+        ],
+      }],
+      "Self-Awareness": [{
+        "name": "Body Check-In and Emotion Map",
+        "skill_label": "Self-Awareness and Emotional Literacy",
+        "color": C_ORANGE, "light": C_ORANGE_LIGHT,
+        "objective": "{child} will build increasing awareness of their own emotional states and bodily sensations associated with emotion. By the end of the session series, {child} will spontaneously identify where they feel an emotion in their body and connect it to a named feeling state.",
+        "materials": [
+          ("Primary Tools","Large body outline drawing (A3), colouring markers (4+ colours), feelings chart"),
+          ("Substitutes","Draw a body outline together on any large paper; use crayon or pencil; a simple smiley scale if no feelings chart"),
+          ("Reinforcers","Token board + child keeps the body map they create"),
+        ],
+        "steps": [
+          ("Body scan opening (3 min)","'Let us notice what your body feels today. What do your hands feel like? Your tummy?' Keep it light and curious, not clinical."),
+          ("Introduce the body map (3 min)","Show a blank body outline. 'This is our feelings map. We are going to colour where feelings live in your body.' Model with one emotion first."),
+          ("Child colours their map (10 min)","Guide {child} through 3-4 emotions. For each: name it, ask 'Where do you feel this?' Let {child} choose the colour and mark the spot. Accept any answer."),
+          ("Connect to real moments (5 min)","Point to one marked area: 'Last week when [behaviour occurred], was your tummy feeling this?' Build the bridge gently."),
+          ("Closing body scan (2 min)","Repeat the opening scan. Ask 'Does anything feel different now?'"),
+        ],
+        "adapt": [
+          ("Will not engage with body map","Do a feelings puppet scan instead - the puppet has the feelings, not the child."),
+          ("Cannot connect body to emotion","Use temperature language: 'Does it feel hot or cold inside when you are angry?'"),
+          ("Becomes overwhelmed","Stay with only one emotion per session."),
+          ("No large paper","Any paper works - even a simple outline drawn on A4."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Emotions mapped this session","_____________________________"),
+          ("Body-emotion connection made?","&#9744; Yes - described bodily sensation  &#9744; Partial  &#9744; Not yet"),
+          ("Verbal quality","&#9744; Spontaneous description  &#9744; Responded to prompts  &#9744; Pointed only"),
+          ("Real-moment connection made?","&#9744; Yes  &#9744; Not yet"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} worked on a Feelings Body Map - a large drawing where we coloured in where different emotions live in the body. We talked about what feelings feel like physically.",
+        "parent_why": "Children who can notice body sensations have an early warning system for dysregulation. When {child} learns to notice 'my tummy feels tight' before a meltdown, they gain precious seconds to use a coping strategy.",
+        "parent_tips": [
+          "Ask 'What does your body feel like right now?' during calm moments - not just during hard ones.",
+          "Use physical language yourself: 'My shoulders feel tight today - I think I am a bit stressed.'",
+          "When {child} is escalating, gently ask: 'What does your tummy feel like right now?'",
+          "Keep the body map somewhere visible - children often refer back to it spontaneously.",
+        ],
+        "substitutes": [
+          "A3 body outline: trace around child's hand or arm on any paper",
+          "Markers: crayons, pencils, or stickers to mark body zones",
+          "Feelings chart: a simple hand-drawn smiley/sad/angry face scale",
+        ],
+      }],
+      "Coping Strategies": [{
+        "name": "My Calm Corner Toolkit",
+        "skill_label": "Coping Strategy Development",
+        "color": C_BLUE, "light": C_BLUE_LIGHT,
+        "objective": "{child} will be introduced to and will practise a personalised set of coping strategies appropriate to their developmental level. The goal is for {child} to begin accessing these tools with decreasing levels of adult support over time.",
+        "materials": [
+          ("Primary Tools","Small box or bag, simple breathing exercise card, one sensory item, a picture of something calming, a feelings chart"),
+          ("Substitutes","Any container; draw the breathing card together; sensory item can be textured fabric, smooth stone, or stress ball made from balloon and flour"),
+          ("Reinforcers","Token board + child decorates and keeps their toolkit box"),
+        ],
+        "steps": [
+          ("Introduce the idea (3 min)","'Everyone needs a toolkit for hard moments - even adults. Today we are building yours.' Show an example box. Let {child} explore the items."),
+          ("Breathing practice (5 min)","Teach one simple breathing technique: slow belly breaths, blowing pretend bubbles, or smell the flowers / blow the candles. Practise together 3-4 times."),
+          ("Sensory item selection (3 min)","Offer 2-3 sensory options. Let {child} choose one for their box. Ask 'What does this feel like? Does it feel calming?'"),
+          ("Calming picture (3 min)","Draw or choose a picture of something calming to {child}. Attach to the box. 'When things feel hard, you can look at this.'"),
+          ("Practice run (8 min)","Set up a mild frustrating scenario. Coach {child} to open the toolkit and choose a tool. Celebrate any tool use, however brief."),
+          ("Wrap-up (3 min)","Decide where the toolkit will live in the classroom. 'It will always be here when you need it.'"),
+        ],
+        "adapt": [
+          ("Refuses breathing","Do not force it. Offer the sensory item only. Introduce breathing casually next session."),
+          ("Becomes dysregulated during practice","Use the toolkit for real right now. This is the best possible teaching moment."),
+          ("Wants to play with items, not use them","That is fine initially. Familiarity with the tools is the first step."),
+          ("No box available","Use a corner of the room, a special chair, or a drawer."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Breathing technique practised","_____________________________"),
+          ("Breathing quality","&#9744; Slow and controlled  &#9744; Fast  &#9744; Variable  &#9744; Refused"),
+          ("Sensory item selected","_____________________________"),
+          ("Toolkit used during real distress?","&#9744; Yes - describe in notes  &#9744; No"),
+          ("Tool initiated spontaneously?","&#9744; Yes  &#9744; Prompted  &#9744; Not yet"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Intensity of escalation (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5  &#9744; N/A"),
+          ("Recovery time","_______  min  &#9744; N/A"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} built their very own Calm Corner Toolkit - a personal set of strategies to use when things feel hard. We practised slow breathing, chose a calming sensory item, and drew a picture of something that makes {child} feel safe.",
+        "parent_why": "Children cannot use coping skills they have never practised. By building and rehearsing these tools in calm, playful moments, the brain starts to remember them when things get hard.",
+        "parent_tips": [
+          "Make a matching toolkit at home - {child} can help choose what goes in it.",
+          "Practise the breathing technique during calm moments, not just hard ones.",
+          "If {child} starts to escalate, offer the toolkit calmly: 'Do you want to use your toolkit?'",
+          "Never force the tools during a meltdown. Introduce them just before or just after.",
+          "Celebrate every time {child} uses a tool, even if it only helps a little.",
+        ],
+        "substitutes": [
+          "Box: corner of the room, special chair, or any container",
+          "Sensory item: smooth stone, textured fabric, squeezable sponge, homemade stress ball",
+          "Breathing card: draw together; use hands as a guide (trace fingers = one breath)",
+        ],
+      }],
+    }
+
+    selected_skills = [s for s in skills if s in ACTIVITY_LIBRARY]
+    if not selected_skills:
+        selected_skills = list(ACTIVITY_LIBRARY.keys())
+
+    activity_pool = []
+    for sk in selected_skills:
+        for act in ACTIVITY_LIBRARY[sk]:
+            activity_pool.append(act)
+
+    if not activity_pool:
+        activity_pool = [ACTIVITY_LIBRARY["Emotional Regulation"][0]]
+
+    num_acts = len(activity_pool)
+    base, remainder = divmod(sessions, num_acts)
+    session_counts = [base + (1 if i < remainder else 0) for i in range(num_acts)]
+    session_counts = [max(c, 1) for c in session_counts]
+
+    schedule = []
+    session_num = 1
+    for act, count in zip(activity_pool, session_counts):
+        sess_nums = list(range(session_num, session_num + count))
+        schedule.append((act, count, sess_nums))
+        session_num += count
+
+    def _S(name, **kw):
+        return ParagraphStyle(name, **kw)
+
+    ST = {
+        "page_title": _S("pt", fontName="Helvetica-Bold", fontSize=18, textColor=C_DARK, leading=24),
+        "h2":         _S("h2", fontName="Helvetica-Bold", fontSize=12, textColor=C_DARK, leading=16),
+        "h3":         _S("h3", fontName="Helvetica",      fontSize=10, textColor=C_MID_GREY, leading=14),
+        "body":       _S("bd", fontName="Helvetica",      fontSize=9.5, textColor=C_DARK, leading=14, alignment=TA_JUSTIFY),
+        "body_sm":    _S("bs", fontName="Helvetica",      fontSize=8.5, textColor=C_DARK, leading=12),
+        "bold_sm":    _S("bls",fontName="Helvetica-Bold", fontSize=8.5, textColor=C_DARK, leading=12),
+        "label":      _S("lb", fontName="Helvetica-Bold", fontSize=8,   textColor=C_MID_GREY, leading=11),
+        "bullet":     _S("bu", fontName="Helvetica",      fontSize=9.5, textColor=C_DARK, leading=14, leftIndent=14),
+        "footer":     _S("ft", fontName="Helvetica",      fontSize=7.5, textColor=C_MID_GREY, alignment=TA_CENTER),
+        "parent":     _S("pa", fontName="Helvetica",      fontSize=10,  textColor=C_DARK, leading=15, alignment=TA_JUSTIFY),
+        "sec_hdr":    _S("sh", fontName="Helvetica-Bold", fontSize=11,  textColor=C_WHITE, alignment=TA_LEFT, leading=16, leftIndent=6),
+    }
+
+    def _sp(n=1): return Spacer(1, n * 0.3 * cm)
+    def _hr(accent): return HRFlowable(width="100%", thickness=1, color=accent, spaceAfter=6, spaceBefore=6)
+
+    def _sec(label, accent):
+        data = [[Paragraph(label, ST["sec_hdr"])]]
+        t = Table(data, colWidths=["100%"])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), accent),
+            ("TOPPADDING",    (0,0), (-1,-1), 6),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+            ("LEFTPADDING",   (0,0), (-1,-1), 10),
+        ]))
+        return t
+
+    def _track_table(rows):
+        data = [[Paragraph(a, ST["bold_sm"]), Paragraph(b, ST["body_sm"])] for a, b in rows]
+        t = Table(data, colWidths=[7.5*cm, 10*cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (0,-1), C_LIGHT_GREY),
+            ("ROWBACKGROUNDS",(0,0), (-1,-1), [C_WHITE, HexColor("#F9FBFC")]),
+            ("GRID",          (0,0), (-1,-1), 0.5, C_BORDER),
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+            ("TOPPADDING",    (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING",   (0,0), (-1,-1), 7),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 7),
+        ]))
+        return t
+
+    def _tip_box(tips, accent, light):
+        rows = [[Paragraph("HOME TIPS", ST["label"])]]
+        for tip in tips:
+            rows.append([Paragraph("*  " + tip.replace("{child}", child), ST["body_sm"])])
+        t = Table(rows, colWidths=[17.5*cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (0,0), accent),
+            ("BACKGROUND",    (0,1), (0,-1), light),
+            ("GRID",          (0,0), (-1,-1), 0.5, C_BORDER),
+            ("TOPPADDING",    (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ]))
+        return t
+
+    def _chrome(c_obj, doc_obj, bar_title, bar_sub, accent, tag=None, psize=A4):
+        w, h = psize
+        c_obj.setFillColor(accent)
+        c_obj.rect(0, h - 2.2*cm, w, 2.2*cm, fill=1, stroke=0)
+        c_obj.setFillColor(C_WHITE); c_obj.setFont("Helvetica-Bold", 12)
+        c_obj.drawString(1.5*cm, h - 1.35*cm, bar_title)
+        c_obj.setFont("Helvetica", 8.5)
+        c_obj.drawString(1.5*cm, h - 1.85*cm, bar_sub)
+        if tag:
+            tx = w - 3.2*cm; ty = h - 1.65*cm
+            c_obj.setFillColor(C_WHITE)
+            c_obj.roundRect(tx, ty - 0.3*cm, 2.8*cm, 0.7*cm, 4, fill=1, stroke=0)
+            c_obj.setFillColor(accent); c_obj.setFont("Helvetica-Bold", 7)
+            c_obj.drawCentredString(tx + 1.4*cm, ty - 0.08*cm, tag)
+        c_obj.setFillColor(C_LIGHT_GREY); c_obj.rect(0, 0, w, 1.0*cm, fill=1, stroke=0)
+        c_obj.setFillColor(C_MID_GREY); c_obj.setFont("Helvetica", 7)
+        c_obj.drawString(1.5*cm, 0.35*cm, f"{child}  |  {nursery}  |  Therapist: {therapist}")
+        c_obj.drawRightString(w - 1.5*cm, 0.35*cm, "CONFIDENTIAL")
+        c_obj.setFillColor(accent); c_obj.setFillAlpha(0.12)
+        c_obj.rect(0, 1.0*cm, 0.35*cm, h - 3.2*cm, fill=1, stroke=0)
+        c_obj.setFillAlpha(1.0)
+
+    def _make_temp(content_fn, chrome_fn, psize=A4):
+        buf2 = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        buf2.close()
+        doc2 = SimpleDocTemplate(
+            buf2.name, pagesize=psize,
+            leftMargin=1.5*cm, rightMargin=1.5*cm,
+            topMargin=3.0*cm, bottomMargin=1.8*cm,
+        )
+        doc2.build(content_fn(), onFirstPage=chrome_fn, onLaterPages=chrome_fn)
+        return buf2.name
+
+    temp_files = []
+
+    # Cover
+    def make_cover():
+        tmp2 = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp2.close()
+        c2 = rl_canvas.Canvas(tmp2.name, pagesize=A4)
+        w, h = A4
+        c2.setFillColor(C_TEAL); c2.rect(0, 0, w, h, fill=1, stroke=0)
+        c2.setFillColor(HexColor("#1C5F6B")); c2.rect(0, 0, w, h*0.42, fill=1, stroke=0)
+        c2.setFillColor(C_WHITE); c2.setFillAlpha(0.05)
+        c2.circle(w+1*cm, h-2*cm, 9*cm, fill=1, stroke=0)
+        c2.circle(-2*cm, 3*cm, 7*cm, fill=1, stroke=0)
+        c2.setFillAlpha(1.0)
+        c2.setFillColor(C_GOLD); c2.rect(0, h*0.42, w, 0.5*cm, fill=1, stroke=0)
+        c2.setFillColor(C_GOLD)
+        c2.roundRect(1.5*cm, h-3.2*cm, 5.5*cm, 0.9*cm, 5, fill=1, stroke=0)
+        c2.setFillColor(C_DARK); c2.setFont("Helvetica-Bold", 9)
+        c2.drawCentredString(1.5*cm+2.75*cm, h-2.85*cm, nursery.upper()[:28])
+        c2.setFillColor(C_WHITE); c2.setFont("Helvetica-Bold", 36)
+        c2.drawCentredString(w/2, h-5.5*cm, "Activity Session")
+        c2.drawCentredString(w/2, h-6.5*cm, "Pack")
+        c2.setFont("Helvetica", 14); c2.setFillColor(HexColor("#B2DDE5"))
+        c2.drawCentredString(w/2, h-7.8*cm, "Individual Behaviour Support Programme")
+        c2.setStrokeColor(C_GOLD); c2.setLineWidth(1.5)
+        c2.line(w/2-4*cm, h-8.4*cm, w/2+4*cm, h-8.4*cm)
+        c2.setFillColor(HexColor("#1C5F6B"))
+        c2.roundRect(w/2-5.5*cm, h*0.42+1*cm, 11*cm, 5.5*cm, 8, fill=1, stroke=0)
+        c2.setFillColor(C_WHITE); c2.setFont("Helvetica-Bold", 22)
+        c2.drawCentredString(w/2, h*0.42+5.3*cm, child)
+        c2.setFont("Helvetica", 11); c2.setFillColor(HexColor("#B2DDE5"))
+        c2.drawCentredString(w/2, h*0.42+4.5*cm, f"Age: {age}   |   Class: {class_group}")
+        c2.setFont("Helvetica", 10); c2.setFillColor(HexColor("#7ABEC9"))
+        c2.drawCentredString(w/2, h*0.42+3.6*cm, f"Therapist: {therapist}")
+        c2.drawCentredString(w/2, h*0.42+2.9*cm, f"Sessions: {freq_label}  |  {sessions} per month")
+        c2.drawCentredString(w/2, h*0.42+2.2*cm, f"Start Date: {start_str}")
+        c2.drawCentredString(w/2, h*0.42+1.5*cm, f"Activities Planned: {len(schedule)}")
+        act_colors_cv = [C_TEAL, C_GOLD, C_GREEN, C_PURPLE, C_CORAL, C_ORANGE, C_BLUE]
+        tag_w2 = min(3.5*cm, (w-3*cm)/max(len(schedule),1))
+        tag_gap2 = 0.3*cm
+        total_w2 = len(schedule)*tag_w2 + (len(schedule)-1)*tag_gap2
+        start_x2 = (w-total_w2)/2
+        for i2, (act2, cnt2, _) in enumerate(schedule):
+            col2 = act_colors_cv[i2 % len(act_colors_cv)]
+            tx2 = start_x2 + i2*(tag_w2+tag_gap2)
+            c2.setFillColor(col2)
+            c2.roundRect(tx2, 2.8*cm, tag_w2, 1.2*cm, 5, fill=1, stroke=0)
+            c2.setFillColor(C_WHITE); c2.setFont("Helvetica-Bold", 6.5)
+            words2 = act2["name"].split()
+            l1 = " ".join(words2[:2]); l2 = " ".join(words2[2:]) if len(words2)>2 else ""
+            c2.drawCentredString(tx2+tag_w2/2, 3.7*cm, l1[:16])
+            if l2: c2.drawCentredString(tx2+tag_w2/2, 3.25*cm, l2[:16])
+        c2.setFillColor(HexColor("#154952")); c2.rect(0, 0, w, 1.8*cm, fill=1, stroke=0)
+        c2.setFillColor(HexColor("#7ABEC9")); c2.setFont("Helvetica", 7.5)
+        c2.drawCentredString(w/2, 0.9*cm, "CONFIDENTIAL - For therapist and family use only.")
+        c2.drawCentredString(w/2, 0.45*cm, f"Generated: {today_str}  |  {nursery}")
+        c2.save()
+        return tmp2.name
+
+    temp_files.append(make_cover())
+
+    # Schedule overview page
+    def sched_content():
+        s = [_sp(4)]
+        s.append(Paragraph("Session Schedule Overview", ST["page_title"]))
+        s.append(Paragraph(f"Child: {child}  |  Therapist: {therapist}  |  {freq_label}  |  {sessions} sessions planned", ST["h3"]))
+        s.append(_hr(C_TEAL)); s.append(_sp())
+        s.append(Paragraph(
+            f"This pack contains {len(schedule)} activit{'y' if len(schedule)==1 else 'ies'} "
+            f"planned across {sessions} sessions this month. Activities have been selected based on "
+            f"the targeted skill areas and distributed to ensure balanced coverage. "
+            f"Where a skill requires reinforcement, an activity is assigned across multiple sessions - "
+            f"this is intentional and reflects best practice for early childhood skill acquisition.",
+            ST["body"]))
+        s.append(_sp(1.5))
+        if behaviors:
+            s.append(_sec("Behaviours Being Addressed", C_TEAL)); s.append(_sp(0.5))
+            s.append(Paragraph("  *  ".join(behaviors), ST["body_sm"]))
+            s.append(_sp(1.5))
+        s.append(_sec("Activity Distribution Across Sessions", C_TEAL)); s.append(_sp(0.5))
+        hdr = [Paragraph(x, ST["bold_sm"]) for x in ["Act #","Activity Name","Skill Targeted","Sessions Assigned","Session Numbers"]]
+        tdata = [hdr]
+        for i3, (act3, cnt3, snums3) in enumerate(schedule, 1):
+            rnote = f"{cnt3} session{'s' if cnt3>1 else ''}"
+            if cnt3 > 1:
+                rnote += " (repeated - foundational skill)"
+            tdata.append([
+                Paragraph(str(i3), ST["body_sm"]),
+                Paragraph(act3["name"], ST["bold_sm"]),
+                Paragraph(act3["skill_label"], ST["body_sm"]),
+                Paragraph(rnote, ST["body_sm"]),
+                Paragraph(", ".join([f"#{n}" for n in snums3]), ST["body_sm"]),
+            ])
+        t3 = Table(tdata, colWidths=[1.2*cm, 5.5*cm, 4.5*cm, 4*cm, 2.3*cm])
+        t3.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,0), C_TEAL),
+            ("TEXTCOLOR",     (0,0), (-1,0), C_WHITE),
+            ("ROWBACKGROUNDS",(0,1), (-1,-1), [C_TEAL_LIGHT, C_WHITE]),
+            ("GRID",          (0,0), (-1,-1), 0.5, C_BORDER),
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+            ("TOPPADDING",    (0,0), (-1,-1), 6),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+            ("LEFTPADDING",   (0,0), (-1,-1), 7),
+        ]))
+        s.append(t3); s.append(_sp(1.5))
+        s.append(_sec("Recommended Session Structure (Every Session)", C_TEAL)); s.append(_sp(0.5))
+        phases = [
+            ("0-3 min",   "Arrival and settling - greet child warmly, allow brief free-choice moment."),
+            ("3-7 min",   "Warm-up check-in - use emotion cards as visual prompt regardless of the day's activity."),
+            ("7-25 min",  "Core activity - follow the Conduct Guide. Use token board throughout."),
+            ("25-28 min", "Cool-down - brief positive reflection. Avoid lengthy discussion."),
+            ("28-30 min", "Transition out - clear verbal and visual signal. Praise any calm transition."),
+        ]
+        pdata2 = [[Paragraph(a2, ST["bold_sm"]), Paragraph(b2, ST["body_sm"])] for a2,b2 in phases]
+        pt2 = Table(pdata2, colWidths=[2.5*cm, 15*cm])
+        pt2.setStyle(TableStyle([
+            ("ROWBACKGROUNDS",(0,0), (-1,-1), [C_TEAL_LIGHT, C_WHITE]),
+            ("GRID",          (0,0), (-1,-1), 0.5, C_BORDER),
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+            ("TOPPADDING",    (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING",   (0,0), (-1,-1), 7),
+        ]))
+        s.append(pt2)
+        return s
+
+    def sched_chrome(c2, doc2):
+        _chrome(c2, doc2, "Session Schedule Overview", f"{child}  |  {sessions} sessions  |  {len(schedule)} activities", C_TEAL, "SCHEDULE")
+
+    temp_files.append(_make_temp(sched_content, sched_chrome))
+
+    # Per-activity pages
+    for act_idx, (act, cnt, sess_nums) in enumerate(schedule):
+        accent = act["color"]; light = act["light"]
+        aname = act["name"]; anum = act_idx + 1
+        sess_label = f"Sessions: {', '.join([f'#{n}' for n in sess_nums])}"
+        repeat_note = (
+            f"This activity is conducted across {cnt} sessions (Sessions {', '.join([str(n) for n in sess_nums])}) - "
+            f"repeated because '{act['skill_label']}' is a foundational skill requiring consistent, spaced practice."
+            if cnt > 1 else ""
+        )
+
+        def make_conduct_content(act=act, accent=accent, light=light, anum=anum, aname=aname, sess_label=sess_label, repeat_note=repeat_note):
+            def content():
+                s = [_sp(4)]
+                s.append(Paragraph(f"Activity {anum}: {aname}", ST["page_title"]))
+                s.append(Paragraph(f"Skill: {act['skill_label']}  |  Duration: 20-30 min  |  {sess_label}", ST["h3"]))
+                s.append(_hr(accent))
+                if repeat_note:
+                    rt = Table([[Paragraph(repeat_note, ST["body_sm"])]], colWidths=[17.5*cm])
+                    rt.setStyle(TableStyle([
+                        ("BACKGROUND",(0,0),(-1,-1),light),
+                        ("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                        ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),
+                        ("LEFTPADDING",(0,0),(-1,-1),8),
+                    ]))
+                    s.append(rt); s.append(_sp())
+                s.append(_sec("Objective", accent)); s.append(_sp(0.5))
+                s.append(Paragraph(act["objective"].format(**{"child":child}), ST["body"]))
+                s.append(_sp(1.5))
+                s.append(_sec("Materials Needed", accent)); s.append(_sp(0.5))
+                mdata = [[Paragraph(a4,ST["bold_sm"]),Paragraph(b4,ST["body_sm"])] for a4,b4 in act["materials"]]
+                mt = Table(mdata, colWidths=[4*cm,13.5*cm])
+                mt.setStyle(TableStyle([
+                    ("ROWBACKGROUNDS",(0,0),(-1,-1),[light,C_WHITE]),
+                    ("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                    ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+                    ("LEFTPADDING",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP"),
+                ]))
+                s.append(mt); s.append(_sp(1.5))
+                s.append(_sec("Step-by-Step Session Guide", accent)); s.append(_sp(0.5))
+                for stitle, sbody in act["steps"]:
+                    s.append(Paragraph(f"<b>{stitle}</b>", ST["h2"]))
+                    s.append(Paragraph(sbody.format(**{"child":child}), ST["body"]))
+                    s.append(_sp(0.5))
+                s.append(_sp())
+                s.append(_sec("Adaptations and Troubleshooting", accent)); s.append(_sp(0.5))
+                adata = [[Paragraph(a5,ST["bold_sm"]),Paragraph(b5.format(**{"child":child}),ST["body_sm"])] for a5,b5 in act["adapt"]]
+                at2 = Table(adata, colWidths=[5*cm,12.5*cm])
+                at2.setStyle(TableStyle([
+                    ("ROWBACKGROUNDS",(0,0),(-1,-1),[light,C_WHITE]),
+                    ("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                    ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+                    ("LEFTPADDING",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP"),
+                ]))
+                s.append(at2)
+                return s
+            return content
+
+        def make_conduct_chrome(accent=accent, anum=anum, aname=aname):
+            def chrome(c2, doc2):
+                _chrome(c2, doc2, f"Activity {anum}: {aname}", "Session Conduct Guide", accent, f"ACT {anum} - CONDUCT")
+            return chrome
+
+        temp_files.append(_make_temp(make_conduct_content(), make_conduct_chrome()))
+
+        def make_tracking_content(act=act, accent=accent, light=light, anum=anum, aname=aname):
+            def content():
+                s = [_sp(4)]
+                s.append(Paragraph(f"In-Session Tracking Sheet - Activity {anum}", ST["page_title"]))
+                s.append(Paragraph(f"{aname}  |  CONFIDENTIAL - Therapist Use Only", ST["h3"]))
+                s.append(_hr(accent))
+                admin = [
+                    [Paragraph("Child:",ST["bold_sm"]),Paragraph(child,ST["body_sm"]),Paragraph("Date:",ST["bold_sm"]),Paragraph("_____________________",ST["body_sm"])],
+                    [Paragraph("Session #:",ST["bold_sm"]),Paragraph("___________",ST["body_sm"]),Paragraph("Duration:",ST["bold_sm"]),Paragraph("________ min",ST["body_sm"])],
+                    [Paragraph("Therapist:",ST["bold_sm"]),Paragraph(therapist,ST["body_sm"]),Paragraph("Setting:",ST["bold_sm"]),Paragraph("_____________________",ST["body_sm"])],
+                ]
+                at3 = Table(admin, colWidths=[3*cm,5.5*cm,3*cm,6*cm])
+                at3.setStyle(TableStyle([
+                    ("BACKGROUND",(0,0),(-1,-1),light),("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                    ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),7),
+                ]))
+                s.append(at3); s.append(_sp(1.5))
+                s.append(_sec("Behavioral Observations", accent)); s.append(_sp(0.5))
+                s.append(_track_table(act["tracking_rows"]))
+                s.append(_sp(1.5))
+                s.append(_sec("Session Notes and Observations", accent)); s.append(_sp(0.5))
+                nt = Table([["_"*110]]*6, colWidths=[17.5*cm])
+                nt.setStyle(TableStyle([
+                    ("TEXTCOLOR",(0,0),(-1,-1),C_LIGHT_GREY),
+                    ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+                    ("LEFTPADDING",(0,0),(-1,-1),7),("LINEBELOW",(0,0),(-1,-1),0.5,C_BORDER),
+                ]))
+                s.append(nt); s.append(_sp())
+                prog = [
+                    ["Progress indicator flagged today:",
+                     "[ ] Increased latency  [ ] Faster recovery  [ ] Improved communication  [ ] Spontaneous replacement"],
+                    ["Next session focus:", "______________________________________________"],
+                ]
+                pt3 = Table([[Paragraph(a6,ST["bold_sm"]),Paragraph(b6,ST["body_sm"])] for a6,b6 in prog], colWidths=[5*cm,12.5*cm])
+                pt3.setStyle(TableStyle([
+                    ("ROWBACKGROUNDS",(0,0),(-1,-1),[light,C_WHITE]),
+                    ("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                    ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),7),
+                ]))
+                s.append(pt3)
+                return s
+            return content
+
+        def make_tracking_chrome(accent=accent, anum=anum, aname=aname):
+            def chrome(c2, doc2):
+                _chrome(c2, doc2, f"Activity {anum}: {aname}", "In-Session Tracking Sheet  |  CONFIDENTIAL", accent, f"ACT {anum} - TRACKING")
+            return chrome
+
+        temp_files.append(_make_temp(make_tracking_content(), make_tracking_chrome()))
+
+        def make_parent_content(act=act, accent=accent, light=light, anum=anum, aname=aname):
+            def content():
+                s = [_sp(4)]
+                s.append(Paragraph("Parent Update Sheet", ST["page_title"]))
+                s.append(Paragraph(f"Activity {anum}: {aname}  |  Date: ___________________", ST["h3"]))
+                s.append(_hr(accent))
+                s.append(Paragraph("Dear Family,", ST["h2"])); s.append(_sp())
+                s.append(Paragraph(act["parent_what"].format(**{"child":child}), ST["parent"]))
+                s.append(_sp(1.5))
+                s.append(_sec("Why This Matters", accent)); s.append(_sp(0.5))
+                s.append(Paragraph(act["parent_why"].format(**{"child":child}), ST["parent"]))
+                s.append(_sp(1.5))
+                s.append(_sec("How They Did Today", accent)); s.append(_sp(0.5))
+                checks = ["Engaged enthusiastically","Engaged with some encouragement","Needed a lot of support today","Had a difficult session - see therapist note"]
+                cells = [Paragraph(f"[ ]  {c}", ST["body_sm"]) for c in checks]
+                cht = Table([cells[:2],cells[2:]], colWidths=[8.75*cm,8.75*cm])
+                cht.setStyle(TableStyle([("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+                s.append(cht); s.append(_sp(1.5))
+                s.append(_tip_box(act["parent_tips"], accent, light))
+                s.append(_sp(1.5))
+                sub_rows = [[Paragraph("NURSERY-FRIENDLY ALTERNATIVES FOR HOME", ST["label"])]]
+                for sub in act["substitutes"]:
+                    sub_rows.append([Paragraph("*  " + sub.format(**{"child":child}), ST["body_sm"])])
+                subt = Table(sub_rows, colWidths=[17.5*cm])
+                subt.setStyle(TableStyle([
+                    ("BACKGROUND",(0,0),(0,0),C_MID_GREY),("BACKGROUND",(0,1),(0,-1),C_LIGHT_GREY),
+                    ("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                    ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),8),
+                ]))
+                s.append(subt); s.append(_sp(1.5))
+                s.append(_sec("Therapist Note", accent)); s.append(_sp(0.5))
+                nt2 = Table([["_"*110]]*4, colWidths=[17.5*cm])
+                nt2.setStyle(TableStyle([
+                    ("TEXTCOLOR",(0,0),(-1,-1),C_LIGHT_GREY),
+                    ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+                    ("LEFTPADDING",(0,0),(-1,-1),7),("LINEBELOW",(0,0),(-1,-1),0.5,C_BORDER),
+                ]))
+                s.append(nt2); s.append(_sp())
+                s.append(Paragraph(
+                    f"Questions? Please speak with {therapist} at pick-up or contact the nursery team. "
+                    f"Your observations at home are a vital part of {child}'s progress.", ST["body_sm"]))
+                return s
+            return content
+
+        def make_parent_chrome(accent=accent, anum=anum, aname=aname):
+            def chrome(c2, doc2):
+                _chrome(c2, doc2, f"Activity {anum}: {aname}", "Parent Update Sheet", accent, f"ACT {anum} - PARENT")
+            return chrome
+
+        temp_files.append(_make_temp(make_parent_content(), make_parent_chrome()))
+
+    # Token board
+    def make_token_board():
+        tmp3 = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp3.close()
+        lsz = landscape(A4)
+        c3 = rl_canvas.Canvas(tmp3.name, pagesize=lsz)
+        w3, h3 = lsz; lm3 = 1.5*cm; rm3 = w3-1.5*cm
+        c3.setFillColor(C_TEAL); c3.rect(0, h3-2.0*cm, w3, 2.0*cm, fill=1, stroke=0)
+        c3.setFillColor(C_WHITE); c3.setFont("Helvetica-Bold", 13)
+        c3.drawString(1.5*cm, h3-1.3*cm, "Token Board")
+        c3.setFont("Helvetica", 9)
+        c3.drawString(1.5*cm, h3-1.75*cm, f"{child}  |  {nursery}  |  Print and laminate for repeated use")
+        c3.setFillColor(C_LIGHT_GREY); c3.rect(0, 0, w3, 0.9*cm, fill=1, stroke=0)
+        c3.setFillColor(C_MID_GREY); c3.setFont("Helvetica", 7)
+        c3.drawCentredString(w3/2, 0.3*cm, f"CONFIDENTIAL - {nursery} - Therapist: {therapist}")
+        panel_w3 = 6.5*cm
+        c3.setFillColor(C_TEAL_LIGHT)
+        c3.roundRect(lm3, 1.2*cm, panel_w3, h3-3.4*cm, 6, fill=1, stroke=0)
+        c3.setStrokeColor(C_TEAL); c3.setLineWidth(1.5)
+        c3.roundRect(lm3, 1.2*cm, panel_w3, h3-3.4*cm, 6, fill=0, stroke=1)
+        px3=lm3+0.8*cm; py3=h3-5.8*cm; ps3=4.5*cm
+        c3.setFillColor(C_WHITE); c3.roundRect(px3, py3, ps3, ps3, 4, fill=1, stroke=0)
+        c3.setStrokeColor(C_TEAL); c3.setLineWidth(1); c3.roundRect(px3, py3, ps3, ps3, 4, fill=0, stroke=1)
+        c3.setFillColor(C_MID_GREY); c3.setFont("Helvetica", 8)
+        c3.drawCentredString(px3+ps3/2, py3+ps3/2+0.3*cm, "Child's")
+        c3.drawCentredString(px3+ps3/2, py3+ps3/2-0.3*cm, "Photo")
+        for lbl3, yo3 in [("Name:",1.2),("Date:",2.0),("Session #:",2.8)]:
+            c3.setFillColor(C_DARK); c3.setFont("Helvetica-Bold", 10)
+            c3.drawString(lm3+0.5*cm, py3-yo3*cm, lbl3)
+            c3.setStrokeColor(C_TEAL); c3.setLineWidth(1)
+            c3.line(lm3+2.8*cm, py3-yo3*cm, lm3+panel_w3-0.5*cm, py3-yo3*cm)
+        c3.setFillColor(C_TEAL); c3.roundRect(lm3+0.3*cm, 2.0*cm, panel_w3-0.6*cm, 1.0*cm, 4, fill=1, stroke=0)
+        c3.setFillColor(C_WHITE); c3.setFont("Helvetica-Bold", 9)
+        c3.drawCentredString(lm3+panel_w3/2, 2.45*cm, "My Reward:")
+        tax3=lm3+panel_w3+0.8*cm; taw3=rm3-tax3; tay3=1.2*cm; tah3=h3-3.4*cm
+        c3.setFillColor(C_GOLD); c3.roundRect(tax3, tay3+tah3-1.4*cm, taw3, 1.4*cm, 4, fill=1, stroke=0)
+        c3.setFillColor(C_DARK); c3.setFont("Helvetica-Bold", 14)
+        c3.drawCentredString(tax3+taw3/2, tay3+tah3-0.85*cm, "My Tokens")
+        cols_n3=5; rows_n3=2; cp3=0.4*cm
+        gh3=tah3-1.4*cm-1.0*cm-0.5*cm
+        cw3=(taw3-cp3*(cols_n3+1))/cols_n3; ch3=(gh3-cp3*(rows_n3+1))/rows_n3
+        tok_cols3=[C_TEAL,C_GOLD,C_GREEN,C_PURPLE,C_CORAL]
+        cell_n3=1
+        for row3 in range(rows_n3):
+            for col3 in range(cols_n3):
+                cx3=tax3+cp3+col3*(cw3+cp3)
+                cy3=tay3+gh3+0.8*cm-cp3-(row3+1)*ch3-row3*cp3
+                col_c3=tok_cols3[col3%len(tok_cols3)]
+                c3.setFillColor(col_c3); c3.setFillAlpha(0.1)
+                c3.roundRect(cx3, cy3, cw3, ch3, 6, fill=1, stroke=0); c3.setFillAlpha(1.0)
+                c3.setStrokeColor(col_c3); c3.setLineWidth(1.5)
+                c3.roundRect(cx3, cy3, cw3, ch3, 6, fill=0, stroke=1)
+                star_sz3=min(cw3,ch3)*0.38; scx3=cx3+cw3/2; scy3=cy3+ch3/2+0.3*cm
+                pts3=[]
+                for i4 in range(5):
+                    oa3=math.radians(90+i4*72); ia3=math.radians(90+i4*72+36)
+                    pts3.append((scx3+star_sz3*math.cos(oa3), scy3+star_sz3*math.sin(oa3)))
+                    pts3.append((scx3+star_sz3*0.4*math.cos(ia3), scy3+star_sz3*0.4*math.sin(ia3)))
+                path3=c3.beginPath(); path3.moveTo(pts3[0][0],pts3[0][1])
+                for px4,py4 in pts3[1:]: path3.lineTo(px4,py4)
+                path3.close()
+                c3.setFillColor(col_c3); c3.setFillAlpha(0.15); c3.drawPath(path3,fill=1,stroke=1); c3.setFillAlpha(1.0)
+                c3.setFillColor(col_c3); c3.setFont("Helvetica-Bold",11)
+                c3.drawCentredString(scx3, cy3+0.35*cm, str(cell_n3)); cell_n3+=1
+        c3.setFillColor(C_LIGHT_GREY); c3.rect(tax3, tay3, taw3, 0.8*cm, fill=1, stroke=0)
+        c3.setFillColor(C_MID_GREY); c3.setFont("Helvetica", 7.5)
+        c3.drawCentredString(tax3+taw3/2, tay3+0.25*cm,
+            "Mark each token as it is earned. When all 10 tokens are collected, the reward is earned!")
+        c3.save()
+        return tmp3.name
+
+    temp_files.append(make_token_board())
+
+    # Materials summary
+    def mat_content():
+        s = [_sp(4)]
+        s.append(Paragraph("Materials and Substitutes - All Activities", ST["page_title"]))
+        s.append(Paragraph("Quick reference for session preparation", ST["h3"]))
+        s.append(_sp(1.5))
+        for i5, (act5, cnt5, _) in enumerate(schedule):
+            acc5=act5["color"]; lgt5=act5["light"]
+            s.append(_sec(f"Activity {i5+1}: {act5['name']}", acc5)); s.append(_sp(0.5))
+            hdr5=[[Paragraph("<b>Item</b>",ST["bold_sm"]),Paragraph("<b>If unavailable - use instead</b>",ST["bold_sm"])]]
+            for itm5,sub5 in act5["materials"]:
+                hdr5.append([Paragraph(itm5,ST["body_sm"]),Paragraph(sub5,ST["body_sm"])])
+            mt5=Table(hdr5, colWidths=[5*cm,12.5*cm])
+            mt5.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,0),acc5),("TEXTCOLOR",(0,0),(-1,0),C_WHITE),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1),[lgt5,C_WHITE]),
+                ("GRID",(0,0),(-1,-1),0.5,C_BORDER),
+                ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+                ("LEFTPADDING",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP"),
+            ]))
+            s.append(mt5); s.append(_sp(1.5))
+        s.append(HRFlowable(width="100%", thickness=1, color=C_BORDER))
+        s.append(_sp(0.5))
+        s.append(Paragraph(
+            "<b>Note:</b> A token board and a set of preferred reinforcers (identified with the family "
+            "before the first session) are required across ALL activities.", ST["body_sm"]))
+        return s
+
+    def mat_chrome(c2, doc2):
+        _chrome(c2, doc2, "Materials and Substitutes", "All activities - quick reference", C_DARK, "MATERIALS")
+
+    temp_files.append(_make_temp(mat_content, mat_chrome))
+
+    # Merge all
+    writer = PdfWriter()
+    for tf in temp_files:
+        reader = PdfReader(tf)
+        for page in reader.pages:
+            writer.add_page(page)
+    out_buf = BytesIO()
+    writer.write(out_buf)
+    for tf in temp_files:
+        try: os.unlink(tf)
+        except: pass
+    return out_buf.getvalue()
