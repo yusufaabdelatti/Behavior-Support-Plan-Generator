@@ -1280,7 +1280,7 @@ def build_pdf(d) -> bytes:
     therapist = d.get("therapist_name") or "—"
 
     demo_rows = [
-        [Paragraph("<b>Child Name</b>",     sSmall), Paragraph(child_full,                  sBody),
+        [Paragraph("<b>Child Name</b>",     sSmall), Paragraph(child,                       sBody),
          Paragraph("<b>Date of Birth</b>",  sSmall), Paragraph(dob_str,                     sBody)],
         [Paragraph("<b>Age</b>",            sSmall), Paragraph(d.get("age","—"),            sBody),
          Paragraph("<b>Class / Group</b>",  sSmall), Paragraph(d.get("class_group","—"),    sBody)],
