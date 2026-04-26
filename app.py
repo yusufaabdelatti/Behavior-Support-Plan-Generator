@@ -9,8 +9,410 @@ Generates premium PDF and Word (.docx) reports.
 import streamlit as st
 import io
 import base64
+import json
+import requests
 from datetime import datetime, date
 from PIL import Image
+
+
+# -----------------------------------------------------------------------------
+# AI GENERATION (Groq)
+# -----------------------------------------------------------------------------
+def _groq_call(prompt: str, system: str, max_tokens: int = 1200) -> str:
+    """Call Groq API and return the text response, or empty string on failure."""
+    try:
+        api_key = st.secrets.get("GROQ_API_KEY", "")
+        if not api_key:
+            return ""
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "max_tokens": max_tokens,
+                "temperature": 0.55,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": prompt},
+                ],
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return ""
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def generate_dynamic_activities(skills_tuple: tuple, behaviors_tuple: tuple, child_name: str) -> list:
+    """
+    Return a list of (title, description) tuples for Session Activities,
+    tailored to the selected skills and behaviors using Groq AI.
+    Falls back to a smart rule-based list if AI is unavailable.
+    """
+    skills = list(skills_tuple)
+    behaviors = list(behaviors_tuple)
+
+    system = (
+        "You are a senior behavioral therapist writing clinical session activity descriptions "
+        "for a child behavior support plan used in a nursery/early childhood setting. "
+        "Your language is professional, evidence-informed, and warm. "
+        "You write in British/international English. "
+        "Respond ONLY with a JSON array — no preamble, no markdown fences. "
+        "Each element: {\"title\": \"...\", \"description\": \"...\"}. "
+        "Titles are 3-6 words. Descriptions are 1-2 sentences, clinical and specific."
+    )
+
+    skills_str = ", ".join(skills) if skills else "general developmental support"
+    behaviors_str = ", ".join(behaviors) if behaviors else "general behavioral concerns"
+
+    prompt = (
+        f"Child: {child_name or 'the child'}\n"
+        f"Target skills: {skills_str}\n"
+        f"Identified behaviors: {behaviors_str}\n\n"
+        f"Generate exactly 6 session activity types that a behavioral therapist would use "
+        f"to address THESE SPECIFIC skills and behaviors. "
+        f"Each activity must directly reference or logically address at least one of the listed skills or behaviors. "
+        f"Do not generate generic activities — make every activity clearly connected to the listed targets."
+    )
+
+    raw = _groq_call(prompt, system, max_tokens=900)
+    if raw:
+        try:
+            raw_clean = raw.strip()
+            if raw_clean.startswith("```"):
+                raw_clean = "\n".join(raw_clean.split("\n")[1:])
+                raw_clean = raw_clean.split("```")[0].strip()
+            items = json.loads(raw_clean)
+            result = [(i["title"], i["description"]) for i in items if "title" in i and "description" in i]
+            if len(result) >= 4:
+                return result
+        except Exception:
+            pass
+
+    # ---- Rule-based fallback ----
+    return _build_fallback_activities(skills, behaviors)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def generate_dynamic_progress(skills_tuple: tuple, behaviors_tuple: tuple, child_name: str) -> list:
+    """
+    Return a list of (icon, title, description) tuples for Indicators of Progress,
+    tailored to the selected skills and behaviors using Groq AI.
+    Falls back to a smart rule-based list if AI is unavailable.
+    """
+    skills = list(skills_tuple)
+    behaviors = list(behaviors_tuple)
+
+    system = (
+        "You are a senior behavioral therapist writing clinical progress indicators "
+        "for a child behavior support plan in a nursery/early childhood setting. "
+        "Your language is professional, evidence-informed, and warm. "
+        "You write in British/international English. "
+        "Respond ONLY with a JSON array — no preamble, no markdown fences. "
+        "Each element: {\"icon\": \"one emoji\", \"title\": \"...\", \"description\": \"...\"}. "
+        "Titles are 3-6 words. Descriptions are 1-2 sentences, specific and observable."
+    )
+
+    skills_str = ", ".join(skills) if skills else "general developmental support"
+    behaviors_str = ", ".join(behaviors) if behaviors else "general behavioral concerns"
+
+    prompt = (
+        f"Child: {child_name or 'the child'}\n"
+        f"Target skills: {skills_str}\n"
+        f"Identified behaviors: {behaviors_str}\n\n"
+        f"Generate exactly 6 observable indicators of progress that a therapist would look for "
+        f"when these specific skills improve and these specific behaviors reduce. "
+        f"Each indicator must be directly linked to the listed skills or behaviors — "
+        f"describe what success actually looks like for THIS child's targets. "
+        f"Use a relevant single emoji icon per indicator."
+    )
+
+    raw = _groq_call(prompt, system, max_tokens=900)
+    if raw:
+        try:
+            raw_clean = raw.strip()
+            if raw_clean.startswith("```"):
+                raw_clean = "\n".join(raw_clean.split("\n")[1:])
+                raw_clean = raw_clean.split("```")[0].strip()
+            items = json.loads(raw_clean)
+            result = [(i.get("icon", "✦"), i["title"], i["description"])
+                      for i in items if "title" in i and "description" in i]
+            if len(result) >= 4:
+                return result
+        except Exception:
+            pass
+
+    # ---- Rule-based fallback ----
+    return _build_fallback_progress(skills, behaviors)
+
+
+# ---- Fallback generators (no AI required) ------------------------------------
+
+_SKILL_ACTIVITY_MAP = {
+    "Emotional Regulation":     ("Emotion regulation practice",
+        "Structured use of co-regulation tools — breathing techniques, calm corners, and emotion cards — "
+        "to help the child identify and manage emotional states with gradually decreasing adult support."),
+    "Impulse Control":          ("Inhibitory control games",
+        "Stop-and-go games, freeze activities, and delayed-response tasks that train the neural pathways "
+        "underlying the ability to pause before acting on an impulse."),
+    "Frustration Tolerance":    ("Structured frustration exposure",
+        "Controlled introduction of manageable difficulty within preferred activities to safely expand "
+        "the child's window of tolerance for disappointment and waiting."),
+    "Communication Skills":     ("Replacement behavior rehearsal",
+        "Explicit teaching and repeated practice of verbal and non-verbal communication alternatives "
+        "for each identified challenging behavior, reducing the need for behavioral escalation."),
+    "Social Skills":            ("Peer interaction scaffolding",
+        "Structured cooperative activities and role-play scenarios designed to build turn-taking, "
+        "conflict resolution, and collaborative engagement with familiar peers."),
+    "Self-Awareness":           ("Reflective emotional dialogue",
+        "Guided post-activity reflection conversations that build the child's vocabulary for internal "
+        "states and develop insight into the connection between triggers and responses."),
+    "Coping Strategies":        ("Personal coping toolkit building",
+        "Collaborative construction and practice of an individualised toolkit of coping strategies "
+        "— sensory tools, breathing cards, and calming rituals — accessible independently."),
+    "Attention and Concentration": ("Graduated attention training",
+        "Progressive focus-and-listen activities with systematically increasing duration to build "
+        "sustained on-task engagement and resistance to environmental distractions."),
+    "Decision Making":          ("Choice-making and consequence exploration",
+        "Structured decision scenarios using visual choice boards and guided reflection on outcomes, "
+        "building the child's confidence and capacity for independent problem-solving."),
+    "Self-Boundaries":          ("Body safety and boundary role-play",
+        "Age-appropriate role-play using puppets and scenarios to develop recognition of personal "
+        "space, assertive communication of limits, and respect for others' boundaries."),
+    "Hyperactivity Reduction":  ("Energy regulation and dial activities",
+        "Structured movement-release followed by guided calm-down practice using the Energy Dial "
+        "framework, building the child's self-awareness of arousal level and modulation strategies."),
+    "Basic Knowledge":          ("Concept consolidation through play",
+        "Structured discovery activities targeting colours, shapes, numbers, and categories within "
+        "a reinforcement-rich, play-based framework to build foundational academic readiness."),
+    "Emotional Resilience":     ("Bounce-back story and reflection",
+        "Shared narratives and guided discussion around characters facing setbacks, building the child's "
+        "growth mindset and capacity for emotional recovery after disappointment."),
+    "Independence and Self-Care": ("Task-analysed self-care practice",
+        "Step-by-step practice of a targeted self-care skill using visual schedules and a systematic "
+        "prompt-fading approach toward full independence."),
+    "Transitions and Flexibility": ("Visual schedule transition practice",
+        "Structured within-session transitions using countdown timers and advance warnings to build "
+        "tolerance for activity changes and unexpected routine shifts."),
+    "Play Skills":              ("Imaginative and cooperative play scaffolding",
+        "Child-led play extended by the therapist through collaborative storytelling and shared goals, "
+        "developing play complexity, narrative language, and peer engagement capacity."),
+}
+
+_BEHAVIOR_ACTIVITY_MAP = {
+    "Throwing objects":             ("Object-use replacement rehearsal",
+        "Explicit practice of safe, appropriate alternative responses to the throwing trigger, "
+        "using role-play and immediate reinforcement of functionally equivalent replacement behaviors."),
+    "Hitting / kicking others":     ("Aggression replacement training",
+        "Teaching specific verbal and physical alternatives to hitting and kicking within structured "
+        "low-stakes scenarios, with consistent reinforcement of non-aggressive responses."),
+    "Tantrums / meltdowns":         ("Dysregulation de-escalation practice",
+        "Rehearsal of early self-regulation strategies at the first signs of escalation, with gradual "
+        "reduction of adult support needed to return to a regulated baseline."),
+    "Biting":                       ("Oral replacement behavior practice",
+        "Identification and rehearsal of safe oral alternatives and communication replacements for "
+        "biting triggers, paired with consistent reinforcement of appropriate responses."),
+    "Screaming / shouting":         ("Voice regulation and communication practice",
+        "Explicit teaching of volume awareness and appropriate verbal expression strategies as "
+        "replacements for screaming, using visual volume scales and immediate reinforcement."),
+    "Refusing transitions":         ("Transition preparation and acceptance",
+        "Structured use of advance warnings, visual schedules, and countdown tools to reduce "
+        "distress and increase compliance during activity transitions."),
+    "Running away / elopement":     ("Safe boundary and stop-signal rehearsal",
+        "Teaching and practicing a reliable stop response to adult signals within safe, "
+        "controlled environments, with systematic reinforcement of boundary compliance."),
+    "Potty training difficulties":  ("Toileting routine and independence support",
+        "Consistent implementation of a structured toileting schedule with visual supports, "
+        "positive reinforcement of steps completed, and systematic prompt fading."),
+    "Rule following challenges":    ("Rule rehearsal and compliance practice",
+        "Explicit teaching of specific rules within structured game contexts, using visual rule "
+        "cards and reinforcement to build generalised compliance across settings."),
+    "Self-injurious behavior":      ("Safe hands and self-protection rehearsal",
+        "Teaching safe-hands strategies and alternative sensory responses as replacements for "
+        "self-injurious behaviors, with close monitoring and immediate reinforcement."),
+    "Verbal aggression":            ("Assertive communication training",
+        "Explicit practice of appropriate verbal expression strategies as replacements for "
+        "verbally aggressive responses, with reinforcement of calm, assertive language."),
+    "Dropping to the floor":        ("Floor-dropping replacement rehearsal",
+        "Teaching and practicing communicative alternatives (requesting a break, saying 'no') "
+        "as replacements for floor-dropping, with reinforcement of each approximation."),
+    "Interrupting / difficulty waiting for turn": ("Turn-taking and waiting practice",
+        "Structured turn-taking games with visual timers that build the child's capacity to wait "
+        "and take turns, with reinforcement of each successful wait interval."),
+    "Separation anxiety behaviors":  ("Separation tolerance and transition support",
+        "Graduated separation practice with predictable goodbye routines, visual reassurance tools, "
+        "and reinforcement of increasing calm during separation transitions."),
+    "Difficulty sharing / possessive behavior": ("Sharing and joint attention practice",
+        "Structured cooperative activities that require sharing materials, with reinforcement "
+        "of sharing behavior and guided processing of feelings around possession."),
+}
+
+_SKILL_PROGRESS_MAP = {
+    "Emotional Regulation":     ("🌡", "Improved emotional self-regulation",
+        "An observable reduction in the intensity and duration of emotional dysregulation episodes, "
+        "with the child beginning to use regulation tools with decreasing adult support."),
+    "Impulse Control":          ("⏱", "Increased response latency",
+        "A measurable pause between trigger and behavioral response, indicating developing inhibitory "
+        "control and the capacity to reflect before acting."),
+    "Frustration Tolerance":    ("📉", "Broader tolerance window",
+        "The child engaging with frustrating tasks for longer durations without escalating, "
+        "and recovering more quickly when disappointment occurs."),
+    "Communication Skills":     ("💬", "Increased functional communication",
+        "Higher frequency of verbal or non-verbal communication to express needs, particularly "
+        "in situations that previously triggered challenging behavior."),
+    "Social Skills":            ("🤝", "Improved peer engagement",
+        "Observable increase in cooperative play, turn-taking compliance, and use of words "
+        "to negotiate or resolve conflict with familiar peers."),
+    "Self-Awareness":           ("🪞", "Growing emotional literacy",
+        "The child using feeling words spontaneously or in response to gentle prompting, "
+        "and beginning to connect physical sensations to emotional states."),
+    "Coping Strategies":        ("✋", "Spontaneous coping tool use",
+        "The child independently reaching for a coping tool — breathing, sensory item, or "
+        "calm corner — without adult prompting in moments of distress."),
+    "Attention and Concentration": ("🎯", "Extended on-task engagement",
+        "Measurably longer periods of focused engagement on structured tasks, with the child "
+        "resisting distractions and returning to task independently after interruption."),
+    "Decision Making":          ("🧩", "More considered decision-making",
+        "Observable slowing of impulsive choices and the child beginning to consider options "
+        "and consequences before acting, even in brief and simple scenarios."),
+    "Self-Boundaries":          ("🛡", "Assertive boundary communication",
+        "The child using words or gestures to communicate personal limits clearly and appropriately, "
+        "and respecting the stated limits of peers and adults."),
+    "Hyperactivity Reduction":  ("🎚", "Improved arousal self-regulation",
+        "The child demonstrating awareness of their energy level and applying calm-down strategies "
+        "with decreasing adult prompting across classroom and session contexts."),
+    "Basic Knowledge":          ("📚", "Increasing concept mastery",
+        "Reliable and independent identification of targeted foundational concepts — colours, shapes, "
+        "numbers — with generalisation to new objects and real-life contexts."),
+    "Emotional Resilience":     ("🔄", "Faster emotional recovery",
+        "A progressive reduction in the time needed to return to a calm, engaged baseline after a "
+        "setback, with the child beginning to verbalise recovery strategies."),
+    "Independence and Self-Care": ("🌱", "Growing functional independence",
+        "Completion of increasing steps within the target self-care skill independently, with a "
+        "measurable reduction in the number of adult prompts required."),
+    "Transitions and Flexibility": ("🔁", "Smoother activity transitions",
+        "A reduction in distress, resistance, and recovery time during transitions between activities, "
+        "with the child responding to advance warnings and visual cues with increasing calm."),
+    "Play Skills":              ("🎭", "Richer and more sustained play",
+        "Longer episodes of engaged, purposeful play with increasing imaginative complexity and "
+        "capacity for shared play narratives with a peer or adult partner."),
+}
+
+_BEHAVIOR_PROGRESS_MAP = {
+    "Throwing objects":             ("📦", "Reduction in throwing incidents",
+        "A measurable decrease in the frequency of object-throwing, with the child beginning to "
+        "use alternative responses at the point of trigger."),
+    "Hitting / kicking others":     ("🤲", "Decrease in physical aggression",
+        "Fewer incidents of hitting or kicking, with observable use of verbal alternatives "
+        "or adult-seeking behavior in previously triggering situations."),
+    "Tantrums / meltdowns":         ("🌊", "Shorter and less intense meltdowns",
+        "A reduction in meltdown duration and intensity, with faster return to regulated baseline "
+        "and earlier use of co-regulation support."),
+    "Screaming / shouting":         ("🔉", "Improved vocal regulation",
+        "Reduction in screaming and shouting episodes, with the child using appropriate voice "
+        "volume or alternative communication in high-demand situations."),
+    "Refusing transitions":         ("🚶", "Improved transition compliance",
+        "Smoother acceptance of activity transitions with advance warning, and reduction in refusal "
+        "episodes and floor-dropping at transition points."),
+    "Running away / elopement":     ("🛑", "Reliable stop response",
+        "Consistent response to adult stop signals in familiar environments, with reduction "
+        "in elopement incidents and improved boundary awareness."),
+    "Potty training difficulties":  ("✅", "Increasing toileting independence",
+        "Greater consistency in following the toileting routine, with fewer accidents and "
+        "increasing ability to signal toileting needs independently."),
+    "Rule following challenges":    ("📋", "Improved rule compliance",
+        "Greater consistency in following stated rules within structured contexts, with the child "
+        "referencing rule cards independently and requiring fewer reminders."),
+    "Self-injurious behavior":      ("💚", "Reduction in self-injury",
+        "Fewer incidents of self-injurious behavior, with the child beginning to use safe "
+        "alternative responses when distressed, and faster recovery with adult support."),
+    "Verbal aggression":            ("🗣", "Calmer verbal expression",
+        "Reduction in verbally aggressive episodes, with the child using assertive but appropriate "
+        "language to express frustration or disagreement."),
+    "Interrupting / difficulty waiting for turn": ("⏳", "Improved waiting capacity",
+        "Measurably longer successful waits in structured turn-taking activities, with the child "
+        "using verbal expression ('my turn soon') rather than interrupting."),
+    "Separation anxiety behaviors":  ("🌤", "Calmer separation transitions",
+        "Reduction in distress at separation points, with the child engaging with the predictable "
+        "goodbye routine and settling more quickly after separation."),
+    "Difficulty sharing / possessive behavior": ("🤲", "Increased sharing behavior",
+        "Higher frequency of spontaneous sharing in low-stakes contexts, and calmer acceptance "
+        "of turns and shared access to preferred materials."),
+}
+
+
+def _build_fallback_activities(skills: list, behaviors: list) -> list:
+    """Build a tailored activity list from skill/behavior maps without AI."""
+    seen = set()
+    result = []
+    # Skill-based
+    for s in skills:
+        if s in _SKILL_ACTIVITY_MAP and s not in seen:
+            result.append(_SKILL_ACTIVITY_MAP[s])
+            seen.add(s)
+    # Behavior-based (up to filling 6 total)
+    for b in behaviors:
+        if len(result) >= 6:
+            break
+        if b in _BEHAVIOR_ACTIVITY_MAP and b not in seen:
+            result.append(_BEHAVIOR_ACTIVITY_MAP[b])
+            seen.add(b)
+    # Generic pad items if needed
+    generic = [
+        ("Positive reinforcement systems",
+         "Consistent, specific, and immediate reinforcement of target behaviors and approximations, "
+         "using individually motivating reinforcers identified in collaboration with the child and family."),
+        ("Reflective dialogue",
+         "Age-appropriate post-activity discussion to build the child's capacity for emotional "
+         "retrospection and self-awareness without shame or blame."),
+        ("Co-regulation activities",
+         "Guided breathing, sensory regulation tools, and calming rituals to help the child "
+         "experience regulated states before working toward independent regulation."),
+    ]
+    for g in generic:
+        if len(result) >= 6:
+            break
+        result.append(g)
+    return result[:6] if result else [
+        ("Structured supportive play", "Play-based activities tailored to the child's developmental profile."),
+        ("Positive reinforcement systems", "Consistent reinforcement of target behaviors."),
+    ]
+
+
+def _build_fallback_progress(skills: list, behaviors: list) -> list:
+    """Build a tailored progress indicator list from skill/behavior maps without AI."""
+    seen = set()
+    result = []
+    for s in skills:
+        if s in _SKILL_PROGRESS_MAP and s not in seen:
+            result.append(_SKILL_PROGRESS_MAP[s])
+            seen.add(s)
+    for b in behaviors:
+        if len(result) >= 6:
+            break
+        if b in _BEHAVIOR_PROGRESS_MAP and b not in seen:
+            result.append(_BEHAVIOR_PROGRESS_MAP[b])
+            seen.add(b)
+    generic = [
+        ("🌍", "Generalisation across settings",
+         "Transfer of skill use beyond the formal session context into the broader nursery "
+         "environment and, where reported, the home setting."),
+        ("✋", "Spontaneous replacement behaviors",
+         "The child independently initiating a replacement behavior without adult prompting "
+         "in the natural environment."),
+    ]
+    for g in generic:
+        if len(result) >= 6:
+            break
+        result.append(g)
+    return result[:6] if result else [
+        ("📉", "Reduced behavioral intensity",
+         "A measurable decrease in the severity of behavioral episodes over a consistent time period."),
+        ("🔄", "Faster recovery",
+         "A progressive reduction in recovery time following dysregulation."),
+    ]
 
 # -----------------------------------------------------------------------------
 # PAGE CONFIG
@@ -564,11 +966,16 @@ def render_html_preview(d):
     if not skills_html:
         skills_html = '<p class="doc-p" style="opacity:0.4">No skills selected.</p>'
 
-    # Activities
+    # Activities — dynamically tailored to skills + behaviors
+    all_skills_for_ai  = tuple(all_skills)
+    all_behaviors_for_ai = tuple(all_behaviors)
+    child_name_for_ai  = d.get("child_name", "")
+
+    dynamic_activities = generate_dynamic_activities(all_skills_for_ai, all_behaviors_for_ai, child_name_for_ai)
     activities_html = "".join(
         f'<div class="doc-bullet-item"><div class="doc-dot"></div>'
         f'<div><strong>{t}:</strong> {b}</div></div>'
-        for t, b in ACTIVITY_ITEMS
+        for t, b in dynamic_activities
     )
 
     # Monitoring table
@@ -577,12 +984,13 @@ def render_html_preview(d):
         for d_, r in MONITORING_ROWS
     )
 
-    # Progress cards
+    # Progress cards — dynamically tailored to skills + behaviors
+    dynamic_progress = generate_dynamic_progress(all_skills_for_ai, all_behaviors_for_ai, child_name_for_ai)
     progress_cards = "".join(
         f'<div class="doc-progress-card"><div class="doc-progress-icon">{ic}</div>'
         f'<div class="doc-progress-title">{t}</div>'
         f'<div class="doc-progress-body">{b}</div></div>'
-        for ic, t, b in PROGRESS_CARDS
+        for ic, t, b in dynamic_progress
     )
 
     # Notes
@@ -833,6 +1241,7 @@ def build_pdf(d) -> bytes:
     today = datetime.now().strftime("%d %B %Y")
     start = d["start_date"].strftime("%d %B %Y") if d.get("start_date") else "—"
     all_behaviors = d["behaviors"] + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
+    all_skills    = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
     nursery   = d.get("nursery_name") or "Nursery"
     child     = d.get("child_name")   or "—"
     footer_t  = d.get("footer_text")  or "Confidential — For internal and family use only."
@@ -980,7 +1389,6 @@ def build_pdf(d) -> bytes:
                             "programme. Each skill area is interconnected; progress in one domain typically "
                             "supports development across others.", sBody))
 
-    all_skills = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
     for s in all_skills:
         if s in SKILL_DETAILS:
             title, body = SKILL_DETAILS[s]
@@ -1008,9 +1416,12 @@ def build_pdf(d) -> bytes:
     # -- Section 4 — Activities -------------------------------------------------
     story += [sec_hdr(4, "Session Activities"), sp(0.15)]
     story.append(Paragraph("Sessions will incorporate a variety of structured, play-based, and reflective "
-                            "activities designed to build the targeted skills in an engaging and developmentally "
-                            "appropriate manner:", sBody))
-    for t_, b_ in ACTIVITY_ITEMS:
+                            "activities designed to build the targeted skills and address the identified "
+                            "behavioral concerns in an engaging and developmentally appropriate manner:", sBody))
+    _acts = generate_dynamic_activities(
+        tuple(all_skills), tuple(all_behaviors), child
+    )
+    for t_, b_ in _acts:
         story.append(bullet_p(t_, b_))
     story.append(sp(0.4))
 
@@ -1044,7 +1455,10 @@ def build_pdf(d) -> bytes:
                             "review meetings. The following indicators will be used as primary markers of "
                             "meaningful progress:", sBody))
 
-    prog_pairs = list(zip(PROGRESS_CARDS[::2], PROGRESS_CARDS[1::2]))
+    _prog = generate_dynamic_progress(
+        tuple(all_skills), tuple(all_behaviors), child
+    )
+    prog_pairs = list(zip(_prog[::2], _prog[1::2]))
     for left, right in prog_pairs:
         row = [
             [Paragraph(f"<b>{left[0]} {left[1]}</b>",
@@ -1563,7 +1977,10 @@ def build_pdf_parent(d) -> bytes:
             f"Sessions happen <b>{freq}</b> ({spm} times per month).",
             sBody),
     ]
-    for t_, b_ in ACTIVITY_ITEMS:
+    _parent_acts = generate_dynamic_activities(
+        tuple(all_skills), tuple(all_behaviors), child
+    )
+    for t_, b_ in _parent_acts:
         story.append(Paragraph(f"• <b>{t_}:</b> {b_}", sBullet))
     story.append(sp(0.3))
 
@@ -1575,7 +1992,10 @@ def build_pdf_parent(d) -> bytes:
             f"We will look for small, meaningful signs that {child} is growing. Here is what to watch for:",
             sBody),
     ]
-    for _, t_, b_ in PROGRESS_CARDS:
+    _parent_prog = generate_dynamic_progress(
+        tuple(all_skills), tuple(all_behaviors), child
+    )
+    for _, t_, b_ in _parent_prog:
         story.append(Paragraph(f"• <b>{t_}:</b> {b_}", sBullet))
     story.append(sp(0.3))
 
@@ -1781,6 +2201,7 @@ def build_docx(d) -> bytes:
     today  = datetime.now().strftime("%d %B %Y")
     start  = d["start_date"].strftime("%d %B %Y") if d.get("start_date") else "—"
     all_b  = d["behaviors"] + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
+    all_sk = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
     nursery = d.get("nursery_name") or "Nursery"
     child   = d.get("child_name")   or "—"
     footer_t = d.get("footer_text") or "Confidential — For internal and family use only."
@@ -1905,8 +2326,10 @@ def build_docx(d) -> bytes:
 
     # -- Section 4 — Activities ------------------------------------------------
     add_section_header(4, "Session Activities")
-    add_body("Sessions will incorporate structured, play-based, and reflective activities:")
-    for t_, b_ in ACTIVITY_ITEMS:
+    add_body("Sessions will incorporate structured, play-based, and reflective activities "
+             "designed to address the targeted skills and behaviors:")
+    _docx_acts = generate_dynamic_activities(tuple(all_sk), tuple(all_b), child)
+    for t_, b_ in _docx_acts:
         add_bullet(t_, b_)
     add_spacer()
 
@@ -1940,7 +2363,8 @@ def build_docx(d) -> bytes:
     # -- Section 6 — Progress -------------------------------------------------
     add_section_header(6, "Indicators of Progress")
     add_body("The following indicators will be used as primary markers of meaningful progress:")
-    for _, t_, b_ in PROGRESS_CARDS:
+    _docx_prog = generate_dynamic_progress(tuple(all_sk), tuple(all_b), child)
+    for _, t_, b_ in _docx_prog:
         add_bullet(t_, b_)
     add_spacer()
 
@@ -2295,6 +2719,15 @@ def main():
 
     # -- Live preview ----------------------------------------------------------
     if d["child_name"].strip():
+        # Pre-warm AI generation with a spinner (cached after first call)
+        _sk_t = tuple(d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else []))
+        _bh_t = tuple((d.get("behaviors") or []) + ([d["custom_behavior"]] if d.get("custom_behavior") else []))
+        _cn   = d.get("child_name", "")
+        if _sk_t or _bh_t:
+            with st.spinner("✦ Tailoring activities and progress indicators to selected skills and behaviors…"):
+                generate_dynamic_activities(_sk_t, _bh_t, _cn)
+                generate_dynamic_progress(_sk_t, _bh_t, _cn)
+
         st.markdown(render_html_preview(d), unsafe_allow_html=True)
 
         # Export section
