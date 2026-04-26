@@ -388,6 +388,69 @@ SKILL_DETAILS = {
         "regulation tools, and structured calming corners. The goal is for the child to begin accessing these "
         "tools with decreasing levels of adult support over time."
     ),
+    "Attention and Concentration": (
+        "Attention and Concentration",
+        "The child will develop the capacity to sustain focused attention on a task or activity for increasing "
+        "durations, appropriate to their developmental stage. Sessions will use structured, play-based attention "
+        "exercises with graduated difficulty, visual focus cues, and reinforcement systems. The goal is for the "
+        "child to build on-task behaviour and resist distracting stimuli with progressively less adult scaffolding."
+    ),
+    "Decision Making": (
+        "Decision Making and Problem Solving",
+        "The child will develop age-appropriate skills in weighing simple choices, anticipating consequences, "
+        "and selecting adaptive responses to everyday situations. Sessions will use guided choice-making tasks, "
+        "visual choice boards, and structured problem-solving conversations that build the child's confidence "
+        "in making independent decisions within safe, supported boundaries."
+    ),
+    "Self-Boundaries": (
+        "Self-Boundaries and Personal Space Awareness",
+        "The child will learn to recognise and communicate their own physical and emotional boundaries, and "
+        "to respect the boundaries of others. Sessions will address body autonomy, identifying comfortable and "
+        "uncomfortable interactions, and using assertive yet appropriate language to express limits. "
+        "This skill is foundational to both peer relationships and personal safety."
+    ),
+    "Hyperactivity Reduction": (
+        "Hyperactivity Reduction and Self-Regulation of Activity Level",
+        "The child will develop awareness of their own arousal level and build a repertoire of strategies to "
+        "modulate physical activity when the environment requires it. Sessions will include movement-regulation "
+        "games, sensory input activities, structured transitions, and explicit teaching of body-awareness cues. "
+        "Progress is tracked through observable increases in the child's capacity to sustain calm engagement."
+    ),
+    "Basic Knowledge": (
+        "Basic Knowledge and Foundational Concepts",
+        "The child will develop and consolidate foundational cognitive concepts including colours, shapes, "
+        "numbers, letters, spatial relationships, and sequencing. These building blocks are addressed within "
+        "a structured play-based framework that prioritises engagement, repetition, and positive reinforcement, "
+        "ensuring skills are solidly established before new complexity is introduced."
+    ),
+    "Emotional Resilience": (
+        "Emotional Resilience and Recovery",
+        "The child will develop the capacity to bounce back from setbacks, disappointments, and challenging "
+        "emotional experiences without prolonged dysregulation. Sessions will build a growth mindset around "
+        "mistakes, practice perspective-taking after difficult moments, and reinforce the child's narrative "
+        "of themselves as capable and resilient."
+    ),
+    "Independence and Self-Care": (
+        "Independence and Self-Care Skills",
+        "The child will develop age-appropriate independence in daily living tasks such as dressing, tidying, "
+        "and personal hygiene routines. Sessions will use task analysis, visual schedules, and reinforcement "
+        "systems to break each skill into manageable steps, building confidence and reducing reliance on "
+        "adult prompting over time."
+    ),
+    "Transitions and Flexibility": (
+        "Transitions and Cognitive Flexibility",
+        "The child will develop improved tolerance for changes in routine and smoother transitions between "
+        "activities. Sessions will use visual transition tools, countdown strategies, and preparatory cues "
+        "to help the child anticipate and accept change. The goal is to increase the child's overall "
+        "cognitive flexibility and reduce distress when expectations shift."
+    ),
+    "Play Skills": (
+        "Play Skills and Imaginative Engagement",
+        "The child will develop structured and imaginative play skills, including the ability to engage in "
+        "purposeful solo play and cooperative play with peers. Sessions will scaffold progressively complex "
+        "play sequences and introduce shared play narratives, building both enjoyment and the social "
+        "competencies that emerge naturally through child-led play."
+    ),
 }
 
 BEHAVIOR_OPTIONS = [
@@ -395,6 +458,10 @@ BEHAVIOR_OPTIONS = [
     "Tantrums / meltdowns", "Biting", "Screaming / shouting",
     "Refusing transitions", "Destroying materials", "Running away / elopement",
     "Self-injurious behavior", "Spitting", "Verbal aggression",
+    "Potty training difficulties", "Rule following challenges",
+    "Interrupting / difficulty waiting for turn", "Food refusal / mealtime difficulties",
+    "Separation anxiety behaviors", "Excessive clinginess",
+    "Difficulty sharing / possessive behavior", "Wandering / poor environmental awareness",
 ]
 
 MONITORING_ROWS = [
@@ -460,7 +527,6 @@ def render_html_preview(d):
     all_behaviors = d["behaviors"] + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
 
     # Logo
-    logo_html = ""
     if d.get("logo_bytes"):
         b64 = base64.b64encode(d["logo_bytes"]).decode()
         logo_html = f'<img src="data:image/png;base64,{b64}" style="max-height:48px;max-width:130px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85;" />'
@@ -477,13 +543,23 @@ def render_html_preview(d):
 
     # Skills
     skills_html = ""
-    for s in d.get("skills", []):
+    all_skills = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
+    for s in all_skills:
         if s in SKILL_DETAILS:
             title, body = SKILL_DETAILS[s]
             skills_html += f"""
             <div class="doc-skill-blk">
                 <div class="doc-skill-title">{title}</div>
                 <div class="doc-skill-body">{body}</div>
+            </div>"""
+        else:
+            # Custom / Other skill
+            skills_html += f"""
+            <div class="doc-skill-blk">
+                <div class="doc-skill-title">{s}</div>
+                <div class="doc-skill-body">This is a custom skill area identified for this child's programme. 
+                Specific goals and strategies will be developed collaboratively with the team based on the 
+                child's individual profile and needs.</div>
             </div>"""
     if not skills_html:
         skills_html = '<p class="doc-p" style="opacity:0.4">No skills selected.</p>'
@@ -904,23 +980,29 @@ def build_pdf(d) -> bytes:
                             "programme. Each skill area is interconnected; progress in one domain typically "
                             "supports development across others.", sBody))
 
-    for s in d.get("skills", []):
+    all_skills = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
+    for s in all_skills:
         if s in SKILL_DETAILS:
             title, body = SKILL_DETAILS[s]
-            skill_row = [[
-                Paragraph(f"<b>{title}</b>", sSkillT),
-                Paragraph(body, sSkillB),
-            ]]
-            st2 = Table(skill_row, colWidths=[4.0*cm, 12.2*cm])
-            st2.setStyle(TableStyle([
-                ("BACKGROUND",   (0,0),(-1,-1), LINEN),
-                ("LINEAFTER",    (0,0),(0,0), 3, BARK),
-                ("TOPPADDING",   (0,0),(-1,-1), 8),
-                ("BOTTOMPADDING",(0,0),(-1,-1), 8),
-                ("LEFTPADDING",  (0,0),(-1,-1), 10),
-                ("VALIGN",       (0,0),(-1,-1), "TOP"),
-            ]))
-            story += [st2, sp(0.15)]
+        else:
+            title = s
+            body = ("This is a custom skill area identified for this child's programme. "
+                    "Specific goals and strategies will be developed collaboratively with the team based on the "
+                    "child's individual profile and needs.")
+        skill_row = [[
+            Paragraph(f"<b>{title}</b>", sSkillT),
+            Paragraph(body, sSkillB),
+        ]]
+        st2 = Table(skill_row, colWidths=[4.0*cm, 12.2*cm])
+        st2.setStyle(TableStyle([
+            ("BACKGROUND",   (0,0),(-1,-1), LINEN),
+            ("LINEAFTER",    (0,0),(0,0), 3, BARK),
+            ("TOPPADDING",   (0,0),(-1,-1), 8),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 8),
+            ("LEFTPADDING",  (0,0),(-1,-1), 10),
+            ("VALIGN",       (0,0),(-1,-1), "TOP"),
+        ]))
+        story += [st2, sp(0.15)]
     story.append(sp(0.3))
 
     # -- Section 4 — Activities -------------------------------------------------
@@ -1336,6 +1418,7 @@ def build_pdf_parent(d) -> bytes:
     notes    = d.get("notes", "")
     all_behaviors = d.get("behaviors", []) + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
     skills   = d.get("skills", [])
+    all_skills = skills + ([d["custom_skill"]] if d.get("custom_skill") else [])
     footer_t = d.get("footer_text") or "Confidential — For family use."
 
     story = []
@@ -1451,13 +1534,20 @@ def build_pdf_parent(d) -> bytes:
             f"calm, and capable. Here is what we are working on and what it means:",
             sBody),
     ]
-    if skills:
-        for sk in skills:
+    if all_skills:
+        for sk in all_skills:
             if sk in SKILL_DETAILS:
                 _, body = SKILL_DETAILS[sk]
                 story += [
                     Paragraph(f"✦  {sk}", sEmph),
                     Paragraph(body, sBox),
+                    sp(0.1),
+                ]
+            else:
+                story += [
+                    Paragraph(f"✦  {sk}", sEmph),
+                    Paragraph("This is a custom skill area we are working on with your child. "
+                              "Your child's therapist will share specific goals and home strategies with you directly.", sBox),
                     sp(0.1),
                 ]
     else:
@@ -1785,27 +1875,32 @@ def build_docx(d) -> bytes:
     # -- Section 3 — Skills ----------------------------------------------------
     add_section_header(3, "Core Skills Targeted")
     add_body("The following skill areas have been selected as primary targets for this programme:")
-    for s in d.get("skills", []):
+    all_skills_docx = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
+    for s in all_skills_docx:
         if s in SKILL_DETAILS:
             title, body_text = SKILL_DETAILS[s]
-            p_sk = doc.add_paragraph()
-            r_t = p_sk.add_run(f"{title}:  ")
-            r_t.bold = True
-            r_t.font.size = Pt(10)
-            r_t.font.color.rgb = RGBColor(0x2A, 0x25, 0x20)
-            r_b = p_sk.add_run(body_text)
-            r_b.font.size = Pt(9.5)
-            r_b.font.color.rgb = RGBColor(0x4A, 0x45, 0x40)
-            # Light background shading via paragraph border
-            pPr = p_sk._p.get_or_add_pPr()
-            shd = OxmlElement("w:shd")
-            shd.set(qn("w:val"),  "clear")
-            shd.set(qn("w:fill"), "F0EBE1")
-            pPr.append(shd)
-            ind = OxmlElement("w:ind")
-            ind.set(qn("w:left"), "200")
-            pPr.append(ind)
-            set_para_spacing(p_sk, after=60, line=276)
+        else:
+            title = s
+            body_text = ("This is a custom skill area identified for this child's programme. "
+                         "Specific goals and strategies will be developed collaboratively with the team.")
+        p_sk = doc.add_paragraph()
+        r_t = p_sk.add_run(f"{title}:  ")
+        r_t.bold = True
+        r_t.font.size = Pt(10)
+        r_t.font.color.rgb = RGBColor(0x2A, 0x25, 0x20)
+        r_b = p_sk.add_run(body_text)
+        r_b.font.size = Pt(9.5)
+        r_b.font.color.rgb = RGBColor(0x4A, 0x45, 0x40)
+        # Light background shading via paragraph border
+        pPr = p_sk._p.get_or_add_pPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"),  "clear")
+        shd.set(qn("w:fill"), "F0EBE1")
+        pPr.append(shd)
+        ind = OxmlElement("w:ind")
+        ind.set(qn("w:left"), "200")
+        pPr.append(ind)
+        set_para_spacing(p_sk, after=60, line=276)
     add_spacer()
 
     # -- Section 4 — Activities ------------------------------------------------
@@ -1975,6 +2070,9 @@ def render_sidebar() -> dict:
         for s in SKILL_DETAILS.keys():
             if st.checkbox(s, key=f"skill_{s}"):
                 skills.append(s)
+        custom_skill = st.text_input("Other skill (optional)",
+                                      placeholder="Describe a custom skill to target…",
+                                      key="custom_skill")
 
         st.markdown("### Programme Details")
         session_frequency = st.selectbox(
@@ -2041,6 +2139,7 @@ def render_sidebar() -> dict:
             "intensity":         intensity,
             "pattern":           pattern,
             "skills":            skills,
+            "custom_skill":      custom_skill,
             "sessions_per_month": sessions_per_month,
             "session_frequency": session_frequency,
             "notes":             notes,
@@ -2308,6 +2407,7 @@ def build_activity_pack(d) -> bytes:
     freq_label  = d.get("session_frequency") or "—"
     sessions    = int(d.get("sessions_per_month") or 4)
     skills      = d.get("skills") or []
+    all_skills  = skills + ([d["custom_skill"]] if d.get("custom_skill") else [])
     behaviors   = (d.get("behaviors") or []) + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
     footer_t    = d.get("footer_text") or "Confidential — For therapist and family use only."
     today_str   = datetime.now().strftime("%d %B %Y")
@@ -2682,11 +2782,449 @@ def build_activity_pack(d) -> bytes:
           "Breathing card: draw together; use hands as a guide (trace fingers = one breath)",
         ],
       }],
+      "Attention and Concentration": [{
+        "name": "Listening Detectives",
+        "skill_label": "Attention and Concentration",
+        "color": C_TEAL, "light": C_TEAL_LIGHT,
+        "objective": "{child} will develop sustained attention by practicing focused listening tasks with gradually increasing duration and complexity. By the end of the session series, {child} will maintain on-task engagement for progressively longer periods with decreasing adult prompting.",
+        "materials": [
+          ("Primary Tools","Simple sound recordings or instruments, picture cards, token board"),
+          ("Substitutes","Clap rhythms instead of recordings; any visual cards; tally marks for tracking"),
+          ("Reinforcers","Token board + short preferred activity as end reward"),
+        ],
+        "steps": [
+          ("Set up (before session)","Prepare 4-6 sounds or rhythm patterns. Place token board visibly. Decide on target on-task duration from previous data."),
+          ("Introduce the Detective (2 min)","'Today you are a Listening Detective! Your job is to hear something very carefully and tell me what it is.' Show a detective badge if available."),
+          ("Therapist models first (2 min)","Play a sound/rhythm, close eyes, listen, then describe it. Model the full listening behavior before {child}'s turn."),
+          ("Detective rounds (10 min)","Take turns listening and identifying. Each correct response or genuine attempt earns a token. Gradually increase sound complexity or attention duration required."),
+          ("Focus challenge (5 min)","Introduce a brief distraction (a knock, a movement) while {child} is listening. Coach them to ignore it and keep attending. This is the key generalization target."),
+          ("Wrap-up (3 min)","Count tokens. 'You listened so carefully today — your brain worked really hard!'"),
+        ],
+        "adapt": [
+          ("Cannot sustain 30 seconds","Start at 10 seconds. Build up 5 seconds per success."),
+          ("Gets distracted easily","Reduce environmental noise first. Use a visual focus cue: point to ears."),
+          ("Not interested in sounds","Switch to a visual attention task: 'Spot the difference' or sorting."),
+          ("Impulsive responses","Use a counting delay: 'Listen first, then tell me after I count to 3.'"),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Target on-task duration this session","_______  seconds"),
+          ("Maximum sustained attention achieved","_______  seconds"),
+          ("Distractor introduced?","&#9744; Yes  &#9744; Not yet"),
+          ("Response to distractor","&#9744; Maintained focus  &#9744; Briefly distracted, recovered  &#9744; Could not refocus"),
+          ("Prompt level needed","&#9744; Independent  &#9744; Gestural  &#9744; Verbal  &#9744; Full physical"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} played a Listening Detectives game, focusing carefully on sounds and rhythms to identify them. We also practiced staying focused when a small distraction happened nearby.",
+        "parent_why": "The ability to sustain focus is one of the most important skills for learning and social participation. Practicing it in a playful, low-stakes game is the safest way to build it.",
+        "parent_tips": [
+          "At home, try a 'listening moment': sit quietly for 30 seconds and name all the sounds you can hear together.",
+          "When {child} is focused on something they enjoy, gently narrate it: 'Look how well you are concentrating!'",
+          "Reduce background noise (TV, music) during tasks that require {child}'s attention.",
+          "Short focused activities followed by movement breaks work better than long sit-down sessions.",
+        ],
+        "substitutes": [
+          "Sound recordings: clap rhythms, tap patterns on a table, or hum melodies",
+          "Picture cards: any images for sorting or identifying",
+          "No badge: draw a detective hat on paper or use a sticker",
+        ],
+      }],
+      "Decision Making": [{
+        "name": "The Choice Station",
+        "skill_label": "Decision Making and Problem Solving",
+        "color": C_GOLD, "light": C_GOLD_LIGHT,
+        "objective": "{child} will develop confidence in making choices, considering options, and anticipating simple consequences through structured choice-making games and guided reflection. By the end of the session series, {child} will demonstrate increasing independence in everyday decision-making situations.",
+        "materials": [
+          ("Primary Tools","Choice cards or visual choice board (2-3 options), simple scenario cards, token board"),
+          ("Substitutes","Drawn pictures for choices; describe scenarios verbally; any objects representing options"),
+          ("Reinforcers","Token board + child chooses the final reward activity"),
+        ],
+        "steps": [
+          ("Set up (before session)","Prepare 3-4 simple scenario cards (snack choice, activity choice, toy choice). Have choice board ready."),
+          ("Introduce the Choice Station (2 min)","'Today we are going to practice making choices — which is something really important grown-ups do every day!'"),
+          ("Easy warm-up choices (5 min)","Start with preferred options only: 'Do you want to draw or play with blocks first?' Make the decision feel positive and powerful."),
+          ("Scenario practice (10 min)","Present scenario cards. Ask {child} to pick an option. Then ask: 'What do you think will happen if you choose that?' Guide without correcting — explore consequences together."),
+          ("Tough choice challenge (5 min)","Introduce a slightly harder scenario (e.g., sharing a toy vs keeping it). Guide using: 'Stop — Think — Choose — Check.' Reinforce any genuine reflection."),
+          ("Wrap-up (3 min)","'Today you made so many great choices! Making good choices takes practice — and you practiced a lot today.'"),
+        ],
+        "adapt": [
+          ("Freezes when asked to choose","Reduce to two very simple options. Use objects rather than cards."),
+          ("Always chooses impulsively","Introduce a mandatory 3-second wait before any choice is accepted."),
+          ("Becomes upset when wrong","Remove any framing of 'right/wrong'. All choices lead to learning."),
+          ("Advanced learner","Introduce 3-option scenarios and add a consequence-reflection step."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Choices made this session","_______"),
+          ("Decision style","&#9744; Impulsive  &#9744; Considered  &#9744; Hesitant/Frozen  &#9744; Variable"),
+          ("Consequence awareness demonstrated?","&#9744; Yes - described outcome  &#9744; Partial  &#9744; Not yet"),
+          ("Stop-Think-Choose-Check used?","&#9744; Spontaneous  &#9744; Prompted  &#9744; Not yet"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} practiced making choices using our Choice Station game. We worked on slowing down before choosing, and began thinking about what might happen after different choices.",
+        "parent_why": "Children who feel confident making decisions are more independent, more resilient when things go wrong, and better equipped to handle peer pressure and social challenges.",
+        "parent_tips": [
+          "Give {child} real choices throughout the day: 'Do you want the red cup or the blue one?' Both options should be acceptable.",
+          "After a choice, gently reflect: 'How did that work out? Would you choose the same next time?'",
+          "Avoid choosing for {child} when they can manage it. Even a slow or 'wrong' choice is valuable practice.",
+          "When {child} makes a good decision, name it specifically: 'I noticed you thought about that before you decided — brilliant.'",
+        ],
+        "substitutes": [
+          "Choice cards: objects, pictures from a magazine, or hand-drawn options",
+          "Scenario cards: describe verbally or use simple puppets to act out situations",
+        ],
+      }],
+      "Self-Boundaries": [{
+        "name": "My Body, My Space",
+        "skill_label": "Self-Boundaries and Personal Space",
+        "color": C_CORAL, "light": C_CORAL_LIGHT,
+        "objective": "{child} will develop awareness of personal physical space, learn to identify comfortable and uncomfortable interactions, and practice using assertive, appropriate language to communicate boundaries. By the end of the series, {child} will demonstrate increasing confidence in recognising and expressing personal limits.",
+        "materials": [
+          ("Primary Tools","Hula hoop or chalk circle, 'comfortable / uncomfortable' picture cards, token board"),
+          ("Substitutes","Draw a circle on paper to represent personal space; use thumbs up/down for comfortable/uncomfortable; any stuffed animal for role-play"),
+          ("Reinforcers","Token board + child's choice of closing activity"),
+        ],
+        "steps": [
+          ("Set up (before session)","Place hula hoop on floor. Prepare picture cards. Have token board ready."),
+          ("My Space Circle (3 min)","Stand inside the hoop: 'This is your personal space — your bubble. Everyone has one.' Let {child} decorate or name their bubble."),
+          ("Comfortable / Uncomfortable (5 min)","Show picture cards of different touch scenarios. Ask: 'Does this feel OK or not OK?' Validate all answers. There are no wrong feelings."),
+          ("Role-play practice (8 min)","Use puppets or soft toys: Puppet A asks for a hug. Coach {child} to respond: 'Yes please / No thank you.' Practice both accepting and declining. Reinforce both as equally valid."),
+          ("Saying 'Stop' practice (5 min)","Role-play a boundary being crossed. Coach {child} to say 'Stop, I don't like that' clearly. Practice volume and body posture. Award token for assertive (not aggressive) responses."),
+          ("Wrap-up (3 min)","'Your body belongs to you. You are always allowed to say no. And we always listen.'"),
+        ],
+        "adapt": [
+          ("Uncomfortable with topic","Keep all scenarios with puppets/toys only. Never use real touch demonstrations."),
+          ("Already assertive but aggressive","Redirect toward assertive voice and words, distinguishing from shouting."),
+          ("Shy or won't respond","Use a scale: thumbs up/sideways/down instead of verbal response."),
+          ("Advanced learner","Introduce digital safety concepts: online spaces have boundaries too."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Personal space concept understood?","&#9744; Yes  &#9744; Partially  &#9744; Not yet"),
+          ("Comfortable/uncomfortable discrimination","&#9744; Consistent  &#9744; Partial  &#9744; Needs more work"),
+          ("Assertive response used?","&#9744; Spontaneous  &#9744; Prompted  &#9744; Not yet"),
+          ("Voice quality during 'Stop' practice","&#9744; Clear and assertive  &#9744; Too quiet  &#9744; Aggressive  &#9744; No response"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} learned about personal space and practiced recognising comfortable and uncomfortable situations. We also practiced saying 'No thank you' and 'Stop, I don't like that' using puppets and role-play.",
+        "parent_why": "Children who understand and can communicate their own boundaries are significantly safer and more socially confident. This skill protects {child} and helps them respect others too.",
+        "parent_tips": [
+          "Always respect {child}'s 'no' to physical contact — even hugs from family. This models that their boundaries matter.",
+          "Practice 'Stop, I don't like that' as a game: take turns with a silly tickle game where {child} can say stop.",
+          "Use books or stories where characters set boundaries and are respected — discuss them together.",
+          "Never force {child} to hug or kiss anyone. Offer a wave or high five as an alternative.",
+        ],
+        "substitutes": [
+          "Hula hoop: chalk circle on floor, a drawn circle on paper, or imaginary bubble",
+          "Picture cards: describe scenarios verbally or draw simple stick figures",
+          "Puppets: any stuffed animals or dolls",
+        ],
+      }],
+      "Hyperactivity Reduction": [{
+        "name": "Energy Dial",
+        "skill_label": "Hyperactivity Reduction and Self-Regulation",
+        "color": C_ORANGE, "light": C_ORANGE_LIGHT,
+        "objective": "{child} will develop awareness of their own activity level and build strategies to modulate energy when the environment requires it. Sessions will use a visual Energy Dial (1 = very calm to 5 = very active) to build body awareness and self-regulation vocabulary.",
+        "materials": [
+          ("Primary Tools","Energy Dial visual (drawn 1-5 scale), movement activity cards, calm-down activity cards, token board"),
+          ("Substitutes","Hand-drawn dial on paper; describe movement activities verbally; any sensory calming items"),
+          ("Reinforcers","Token board + 2 minutes free choice movement at session end"),
+        ],
+        "steps": [
+          ("Set up (before session)","Draw the Energy Dial. Prepare 3 movement cards (jumping, spinning, marching) and 3 calm-down cards (breathing, slow walking, squeezing a ball)."),
+          ("Introduce the Dial (3 min)","'Your body has an energy level — like a TV volume! Sometimes it needs to be on 5, sometimes on 2.' Walk through each level with a body demonstration."),
+          ("Where are you now? (2 min)","Ask {child} to point to their level on the dial. No right or wrong answer. Validate. Record starting level."),
+          ("High energy activity (5 min)","Let {child} engage in an approved high-energy activity (jumping jacks, animal walks). 'Get that energy OUT!'"),
+          ("Dial it down (8 min)","'Now let's bring the dial down to a 2.' Practice slow deep breaths, slow motion walking, or gentle squeezing. Check dial again. Award token for each dial reduction attempted."),
+          ("Generalisation discussion (2 min)","'When do you need to bring your dial down at nursery?' Identify 2 real moments. This is the key generalisation step."),
+          ("Wrap-up","Record dial start and end levels. 'You learned how to control your own dial today!'"),
+        ],
+        "adapt": [
+          ("Cannot self-rate","Therapist rates together: 'I think your body is at a 4 right now — do you agree?'"),
+          ("Refuses calm-down activities","Offer choice between two calm-down options. Reduce duration to 30 seconds initially."),
+          ("High energy throughout","Ensure significant physical release before calm-down. Never skip the high energy phase."),
+          ("Very low energy","Still teach the dial — help child recognize when they could bring energy UP (agency in both directions)."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Starting dial level (self-reported)","_______"),
+          ("Ending dial level (self-reported)","_______"),
+          ("Largest dial reduction achieved","_______  levels"),
+          ("Calm-down strategy used","_____________________________"),
+          ("Self-rating accuracy (vs therapist observation)","&#9744; Accurate  &#9744; Over-estimated  &#9744; Under-estimated"),
+          ("Generalisation moment identified?","&#9744; Yes - recorded above  &#9744; Not yet"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} learned about their Energy Dial — a 1-5 scale for how active their body feels. We practiced getting energy OUT safely, and then bringing the dial back down using calm-down strategies.",
+        "parent_why": "Children with high energy levels often struggle not because they are being naughty, but because they have not yet learned how to self-regulate their arousal. Teaching them to notice and name their energy level is the first step.",
+        "parent_tips": [
+          "Use the dial language at home: 'What level is your body on right now?' Accept any answer without judgment.",
+          "Before a sit-down activity, offer 5 minutes of physical movement first — this helps the brain settle.",
+          "Celebrate any moment you notice {child} slowing down or choosing a calmer activity independently.",
+          "Keep calm-down strategies consistent between home and nursery — ask the therapist for the specific strategies we use.",
+        ],
+        "substitutes": [
+          "Energy Dial: hold up fingers 1-5, or draw a simple thermometer scale",
+          "Movement cards: describe activities verbally or let child choose from familiar options",
+          "Calm-down items: any sensory object, a favourite quiet toy, or a cozy corner",
+        ],
+      }],
+      "Basic Knowledge": [{
+        "name": "Discovery Box Challenge",
+        "skill_label": "Basic Knowledge and Foundational Concepts",
+        "color": C_GREEN, "light": C_GREEN_LIGHT,
+        "objective": "{child} will consolidate foundational concepts including colours, shapes, numbers, and simple categorisation within a structured, play-based exploration framework. Progress is measured by increasing accuracy and independence in identifying and using target concepts.",
+        "materials": [
+          ("Primary Tools","Small box filled with objects of different colours and shapes, simple sorting mats, number cards 1-10, token board"),
+          ("Substitutes","Any household objects; hand-drawn sorting mats; finger counting in place of number cards"),
+          ("Reinforcers","Token board + child decorates their own 'Discovery Box' at end of session series"),
+        ],
+        "steps": [
+          ("Set up (before session)","Fill box with 8-10 objects covering target concepts. Prepare sorting mats. Decide which concepts to focus on this session."),
+          ("Reveal the box (2 min)","'I have a mystery box with amazing things inside!' Build excitement before opening. Let {child} reach in and pull items out one by one."),
+          ("Identify and sort (10 min)","For each object: name it, identify its colour, shape, or category. Use questioning: 'What colour is this? Where does it go?' Prompt as needed. Token for each correct attempt."),
+          ("Number practice (5 min)","Count the objects in each sorted group. Point to and count together. Use number cards to match. 'How many red ones do we have?'"),
+          ("Concept game (5 min)","Simon Says using concepts: 'Simon says touch something ROUND / touch something BLUE.' Quick-fire, fun, no wrong answers punished."),
+          ("Wrap-up (3 min)","'You discovered so many things today!' Review two concepts learned or practiced. Count tokens."),
+        ],
+        "adapt": [
+          ("Knows all presented concepts","Increase complexity: introduce letters, sequences, more/less, opposites."),
+          ("Struggles with multiple concepts","Focus on one concept only per session until solid."),
+          ("Not interested in objects","Switch to favourite materials: toy cars sorted by colour, food items for categories."),
+          ("Language barrier","Use gesture-based sorting: pointing and placing, no verbal labels required initially."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Concepts targeted this session","_____________________________"),
+          ("Accuracy on target concepts","_______  out of  _______  correct"),
+          ("Prompt level needed","&#9744; Independent  &#9744; Gestural  &#9744; Verbal  &#9744; Full physical"),
+          ("Number range accurately counted","1 to  _______"),
+          ("Any concept fully mastered this session?","&#9744; Yes - note which  &#9744; Not yet"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} explored our Discovery Box — full of colourful objects! We practiced identifying colours, shapes, and categories, and did some counting together.",
+        "parent_why": "Foundational concepts like colours, numbers, and shapes are the building blocks of all academic learning. Practising them through play in a relaxed, positive environment is the most effective way to make them stick.",
+        "parent_tips": [
+          "Name concepts naturally throughout the day: 'Can you pass me the ROUND orange? The big red cup?'",
+          "Count everything together: stairs, grapes, socks, anything. Make it a routine.",
+          "Sort laundry by colour or shape together — real-life practice is just as valuable as structured sessions.",
+          "Celebrate every correct identification immediately and specifically: 'You knew that was a triangle!'",
+        ],
+        "substitutes": [
+          "Discovery box: any bag, basket, or box; household items work perfectly",
+          "Sorting mats: drawn circles on paper labelled by colour/shape/category",
+          "Number cards: finger counting, drawn number lines, or number magnets",
+        ],
+      }],
+      "Emotional Resilience": [{
+        "name": "The Bounce-Back Story",
+        "skill_label": "Emotional Resilience and Recovery",
+        "color": C_PURPLE, "light": C_PURPLE_LIGHT,
+        "objective": "{child} will develop a positive narrative around mistakes and setbacks, build perspective-taking skills after difficult moments, and strengthen their sense of themselves as capable and resilient. By the end of the session series, {child} will demonstrate increased emotional recovery speed and a more adaptive response to disappointment.",
+        "materials": [
+          ("Primary Tools","Simple picture books or story cards featuring characters overcoming challenges, a 'Bounce-Back Book' (blank booklet), token board"),
+          ("Substitutes","Verbally narrate stories; draw simple stick figure scenarios; use puppets"),
+          ("Reinforcers","Token board + child adds a page to their personal Bounce-Back Book each session"),
+        ],
+        "steps": [
+          ("Set up (before session)","Choose a simple story featuring a character who faces a setback and recovers. Prepare blank booklet page."),
+          ("Story time (5 min)","Read or narrate the story. Pause at the hard moment: 'Oh no — how do you think they feel?' Pause at recovery: 'What helped them bounce back?'"),
+          ("Connect to real life (5 min)","'Has something like that ever happened to you? What happened?' Listen without fixing. Validate the hard feeling first, then explore recovery."),
+          ("What helps me bounce back? (8 min)","Brainstorm together: 'What are YOUR bounce-back tools?' Draw or dictate 2-3 strategies and add them to the booklet page."),
+          ("Resilience affirmations (3 min)","Teach 1-2 simple phrases: 'I can try again.' 'Making mistakes is how I learn.' 'I am getting stronger every time.' Practice saying them together."),
+          ("Wrap-up","Add the booklet page. 'Look — you have your own Bounce-Back Book now!'"),
+        ],
+        "adapt": [
+          ("Cannot recall a setback","Use only the story character. Direct personal connection is not required."),
+          ("Becomes upset when discussing mistakes","Shift entirely to the fictional character. Keep safe distance."),
+          ("Denies ever having hard moments","Accept it. Plant the seed. Try again in later sessions with a lighter touch."),
+          ("Very resilient already","Focus on empathy: how might others feel when things go wrong? Build outward resilience perspective."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Story connection made?","&#9744; Engaged with story  &#9744; Partial  &#9744; Disengaged"),
+          ("Personal setback shared?","&#9744; Yes - spontaneous  &#9744; Yes - prompted  &#9744; No"),
+          ("Bounce-back strategies identified","_____________________________"),
+          ("Affirmation practiced?","&#9744; Yes  &#9744; Not yet"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} heard a story about a character who faced a hard moment and bounced back. We talked about what helps us recover from difficult things and started building a personal Bounce-Back Book.",
+        "parent_why": "Resilience is not about never struggling — it is about recovering. Children who believe they can bounce back from setbacks are significantly more confident and emotionally healthy.",
+        "parent_tips": [
+          "When things go wrong, name the feeling first: 'That was really disappointing.' Then, after a pause: 'What could we try next time?'",
+          "Share your own small setbacks and how you recovered: 'I made a mistake today and felt frustrated — then I tried again.'",
+          "Praise effort and recovery, not just success: 'I am so proud of how you kept trying even when it was hard.'",
+          "Read picture books together about characters overcoming challenges — ask {child} to predict what the character will do.",
+        ],
+        "substitutes": [
+          "Picture books: any story with a character facing and overcoming a challenge",
+          "Bounce-Back Book: any blank paper stapled together; decorate the cover together",
+          "Story cards: hand-drawn stick figure scenarios",
+        ],
+      }],
+      "Independence and Self-Care": [{
+        "name": "I Can Do It Steps",
+        "skill_label": "Independence and Self-Care Skills",
+        "color": C_BLUE, "light": C_BLUE_LIGHT,
+        "objective": "{child} will develop age-appropriate independence in a targeted daily living skill using task analysis, visual step cards, and systematic reinforcement. By the end of the session series, {child} will complete the target skill with decreasing levels of adult prompting.",
+        "materials": [
+          ("Primary Tools","Visual step cards for the target skill (e.g., hand washing, putting on shoes), token board, the actual materials for the skill"),
+          ("Substitutes","Hand-drawn step pictures; photograph sequence on a phone or tablet; any available real materials"),
+          ("Reinforcers","Token board + child marks off each step on their own visual chart"),
+        ],
+        "steps": [
+          ("Set up (before session)","Identify the specific self-care skill to target (selected with family). Prepare visual step cards. Gather materials."),
+          ("Introduce the steps (3 min)","Show visual cards: 'These are the steps for [skill]. Let us count them together.' Walk through each step while narrating."),
+          ("Full model (3 min)","Therapist models the complete skill from start to finish. Narrate each step clearly. Use the visual cards as reference."),
+          ("Supported practice (10 min)","{child} attempts the skill with visual cards visible. Use a prompt hierarchy: wait → gesture → verbal → physical. Token for each step completed."),
+          ("Independent attempt (5 min)","Remove prompts. Let {child} try with only the visual cards. Accept a partial attempt as success. Celebrate the furthest independent step reached."),
+          ("Wrap-up (2 min)","Count steps completed independently. Record. 'Every session you do a little more on your own!'"),
+        ],
+        "adapt": [
+          ("Task too complex","Break into smaller sub-steps. Target only step 1 until mastered."),
+          ("Refuses to attempt","Reduce to observation only this session. Try backward chaining: complete all steps for them and let {child} do only the final step."),
+          ("Completes task but needs prompting","Focus entirely on fading prompts rather than adding complexity."),
+          ("Masters skill quickly","Add a new self-care target or increase independence expectation in unfamiliar environments."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Skill targeted this session","_____________________________"),
+          ("Total steps in task","_______"),
+          ("Steps completed independently","_______  out of  _______"),
+          ("Prompt level required for remaining steps","&#9744; Gestural  &#9744; Verbal  &#9744; Physical  &#9744; N/A"),
+          ("Furthest independent step reached","Step #  _______"),
+          ("Any refusal?","&#9744; No  &#9744; Yes - managed how: _____"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} practiced [the target self-care skill] using a step-by-step visual guide. We worked on completing as many steps as possible independently, celebrating every step done without help.",
+        "parent_why": "Independence in daily routines builds confidence, reduces conflict at transition times, and gives children a genuine sense of competence. Every step done alone is a real achievement.",
+        "parent_tips": [
+          "Use the same visual step cards at home if possible — ask the therapist for a copy.",
+          "Give {child} time to attempt each step before stepping in to help.",
+          "Use the same words and sequence we use in sessions to keep it consistent.",
+          "Never take over a step {child} can manage — even if it takes longer. The time is worth it.",
+        ],
+        "substitutes": [
+          "Visual step cards: photographs on a phone or tablet; drawn pictures; written words if {child} can read",
+          "Real materials: whatever is available at home for the target skill",
+        ],
+      }],
+      "Transitions and Flexibility": [{
+        "name": "The Transition Train",
+        "skill_label": "Transitions and Cognitive Flexibility",
+        "color": C_TEAL, "light": C_TEAL_LIGHT,
+        "objective": "{child} will develop improved tolerance for changes in activity and routine using visual transition tools, advance warning strategies, and structured preparation rituals. By the end of the session series, {child} will demonstrate smoother transitions with decreasing distress and adult support.",
+        "materials": [
+          ("Primary Tools","Visual schedule (4-5 activity pictures), countdown timer, transition signal (bell or clap pattern), token board"),
+          ("Substitutes","Drawn pictures for schedule; count aloud instead of timer; consistent verbal warning phrase as signal"),
+          ("Reinforcers","Token board + {child} gets to place each activity picture on the schedule themselves"),
+        ],
+        "steps": [
+          ("Set up (before session)","Prepare visual schedule with 4-5 activities for today's session. Have timer ready."),
+          ("Preview the session (2 min)","Show the schedule: 'Here is what we are doing today — and here is when each thing ends.' Let {child} place their own picture if possible. Predictability is the goal."),
+          ("First transition practice (8 min)","Run first activity. Set timer. Give 2-minute warning: 'Two more minutes, then we go to [next activity].' When timer sounds, use the transition signal. Support calmly through the change."),
+          ("Second transition practice (8 min)","Repeat with next activity. Reduce support if first went well. Token awarded for each calm transition."),
+          ("Surprise transition (4 min)","Without warning: 'Actually — we are doing something different now!' Practice the unexpected change. Coach: 'Plans change sometimes — that is OK.' Support as needed but aim for less than first transition."),
+          ("Wrap-up (3 min)","Count tokens. 'You switched activities so many times today and you did it!'"),
+        ],
+        "adapt": [
+          ("Refuses all transitions","Use only 2 activities. Increase warning time to 5 minutes. Let {child} hold the timer."),
+          ("Distressed by surprise change","Skip the surprise transition until planned transitions are solid. Introduce gently later."),
+          ("Transitions fine, but rigid in preferences","Focus on flexibility within a single activity: change the rules slightly mid-game."),
+          ("Already flexible","Add complexity: reduce warning time; increase number of transitions; introduce multi-step sequences."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Number of transitions attempted","_______"),
+          ("Transitions completed calmly","_______  out of  _______"),
+          ("Warning time used","_______  minutes"),
+          ("Surprise transition introduced?","&#9744; Yes  &#9744; Not yet"),
+          ("Response to surprise transition","&#9744; Calm  &#9744; Brief distress, recovered  &#9744; Significant distress"),
+          ("Prompt level needed","&#9744; Independent  &#9744; Gestural  &#9744; Verbal  &#9744; Full support"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} practiced moving between activities using a visual schedule and a countdown timer. We worked on listening for the transition signal and switching activities calmly — including one surprise change!",
+        "parent_why": "Transitions are one of the most common trigger points for challenging behaviour in young children. Giving advance warning and keeping routines predictable can dramatically reduce distress around changes.",
+        "parent_tips": [
+          "Give {child} a 2-5 minute warning before any activity change: 'In 3 minutes we are going to tidy up.'",
+          "Use a consistent transition signal at home — the same phrase or sound every time.",
+          "Keep the visual schedule visible at home for the day's routine — mornings and evenings especially.",
+          "When {child} manages a hard transition, name it: 'That was a big change and you handled it so well.'",
+        ],
+        "substitutes": [
+          "Visual schedule: drawn pictures; photographs; word list if child can read",
+          "Timer: count aloud; use a sand timer; set a phone alarm with a gentle sound",
+          "Transition signal: a consistent clap pattern, a specific phrase, or a small bell",
+        ],
+      }],
+      "Play Skills": [{
+        "name": "Imagination Station",
+        "skill_label": "Play Skills and Imaginative Engagement",
+        "color": C_GOLD, "light": C_GOLD_LIGHT,
+        "objective": "{child} will develop structured and imaginative play skills, including purposeful engagement with play materials and the capacity for shared imaginative narratives with a play partner. By the end of the session series, {child} will demonstrate increasing complexity and duration of play engagement.",
+        "materials": [
+          ("Primary Tools","Assorted play materials (figures, vehicles, craft supplies, building blocks), role-play props, token board"),
+          ("Substitutes","Any available toys; household objects as props; draw scenes if no figures available"),
+          ("Reinforcers","Token board + child keeps a small drawing or creation from each session"),
+        ],
+        "steps": [
+          ("Set up (before session)","Arrange 2-3 play material options. Have a simple play scenario idea ready but be prepared to follow {child}'s lead."),
+          ("Child-led exploration (5 min)","Let {child} explore materials freely. Observe play style. Join as a parallel player without directing."),
+          ("Extend the play (8 min)","Add an element to the play: a character, a problem, a destination. Follow {child}'s lead. Narrate collaboratively: 'And then what happened?' Scaffold without taking over."),
+          ("Cooperative play challenge (5 min)","Introduce a simple shared goal: 'Let us build a house for all the animals together.' Practice sharing materials and negotiating roles."),
+          ("Story capture (3 min)","Ask {child} to tell you or draw what happened in the play. 'If this was a book, what would it be called?' Build narrative language."),
+          ("Wrap-up (2 min)","Count tokens. Celebrate imagination: 'The story we made today was amazing!'"),
+        ],
+        "adapt": [
+          ("Functional play only, no imagination","Scaffold: 'What if this block was a bed? Who sleeps here?' Introduce fiction gently."),
+          ("Solitary play only","Parallel play alongside without intrusion. Gradual joining over multiple sessions."),
+          ("Directs therapist rigidly","Accept the role fully first. Gradually introduce small variations to test flexibility."),
+          ("Very advanced imagination","Co-create more complex multi-session narratives. Introduce characters with emotions and dilemmas."),
+        ],
+        "tracking_rows": [
+          ("Engagement level (1-5)","&#9744; 1  &#9744; 2  &#9744; 3  &#9744; 4  &#9744; 5"),
+          ("Play type observed","&#9744; Solitary  &#9744; Parallel  &#9744; Associative  &#9744; Cooperative"),
+          ("Imaginative elements present?","&#9744; Yes - describe in notes  &#9744; Functional only"),
+          ("Duration of sustained play","_______  minutes"),
+          ("Shared goal achieved?","&#9744; Yes  &#9744; Partially  &#9744; Not yet"),
+          ("Narrative language quality","&#9744; Rich and varied  &#9744; Simple labels  &#9744; Non-verbal only"),
+          ("Material sharing observed?","&#9744; Spontaneous  &#9744; Prompted  &#9744; Refused"),
+          ("Any dysregulation?","&#9744; No  &#9744; Yes - describe in notes"),
+          ("Tokens earned","_______"),
+          ("Plan fidelity","&#9744; Fully implemented  &#9744; Modified - see notes"),
+        ],
+        "parent_what": "Today {child} and I created a story together using play materials. We practiced following each other's ideas, sharing, and building something together. {child}'s imagination is wonderful!",
+        "parent_why": "Play is the primary way children learn about the world, relationships, and themselves. Rich, imaginative play builds language, problem-solving, social skills, and emotional understanding simultaneously.",
+        "parent_tips": [
+          "Set aside 10-15 minutes of uninterrupted, screen-free play time daily. Follow {child}'s lead entirely.",
+          "Join the play as a character, not a director: 'Can I be the shopkeeper? What do you need today?'",
+          "Narrate play aloud: 'Oh, the bear is feeling hungry — what should he do?' This builds storytelling language.",
+          "Resist organising or correcting the play. There is no right way to imagine.",
+        ],
+        "substitutes": [
+          "Play figures: any small objects, clothes pegs, or hand-drawn characters on paper",
+          "Role-play props: household items work perfectly — a bowl becomes a cauldron, a box becomes a spaceship",
+        ],
+      }],
     }
 
-    selected_skills = [s for s in skills if s in ACTIVITY_LIBRARY]
+    selected_skills = [s for s in all_skills if s in ACTIVITY_LIBRARY]
     if not selected_skills:
-        selected_skills = list(ACTIVITY_LIBRARY.keys())
+        selected_skills = list(ACTIVITY_LIBRARY.keys())[:3]
 
     activity_pool = []
     for sk in selected_skills:
