@@ -223,7 +223,7 @@ _BEHAVIOR_ACTIVITY_MAP = {
     "Running away / elopement":     ("Safe boundary and stop-signal rehearsal",
         "Teaching and practicing a reliable stop response to adult signals within safe, "
         "controlled environments, with systematic reinforcement of boundary compliance."),
-    "Potty training difficulties":  ("Toileting routine and independence support",
+    "Toilet training difficulties":  ("Toileting routine and independence support",
         "Consistent implementation of a structured toileting schedule with visual supports, "
         "positive reinforcement of steps completed, and systematic prompt fading."),
     "Rule following challenges":    ("Rule rehearsal and compliance practice",
@@ -319,7 +319,7 @@ _BEHAVIOR_PROGRESS_MAP = {
     "Running away / elopement":     ("🛑", "Reliable stop response",
         "Consistent response to adult stop signals in familiar environments, with reduction "
         "in elopement incidents and improved boundary awareness."),
-    "Potty training difficulties":  ("✅", "Increasing toileting independence",
+    "Toilet training difficulties":  ("✅", "Increasing toileting independence",
         "Greater consistency in following the toileting routine, with fewer accidents and "
         "increasing ability to signal toileting needs independently."),
     "Rule following challenges":    ("📋", "Improved rule compliance",
@@ -380,6 +380,14 @@ def _build_fallback_activities(skills: list, behaviors: list) -> list:
         ("Positive reinforcement systems", "Consistent reinforcement of target behaviors."),
     ]
 
+
+
+def get_first_name(full_name: str) -> str:
+    """Return first name only when full_name has multiple words, else return as-is."""
+    if not full_name:
+        return full_name
+    parts = full_name.strip().split()
+    return parts[0] if len(parts) > 1 else full_name
 
 def _build_fallback_progress(skills: list, behaviors: list) -> list:
     """Build a tailored progress indicator list from skill/behavior maps without AI."""
@@ -860,7 +868,7 @@ BEHAVIOR_OPTIONS = [
     "Tantrums / meltdowns", "Biting", "Screaming / shouting",
     "Refusing transitions", "Destroying materials", "Running away / elopement",
     "Self-injurious behavior", "Spitting", "Verbal aggression",
-    "Potty training difficulties", "Rule following challenges",
+    "Toilet training difficulties", "Rule following challenges",
     "Interrupting / difficulty waiting for turn", "Food refusal / mealtime difficulties",
     "Separation anxiety behaviors", "Excessive clinginess",
     "Difficulty sharing / possessive behavior", "Wandering / poor environmental awareness",
@@ -931,7 +939,7 @@ def render_html_preview(d):
     # Logo
     if d.get("logo_bytes"):
         b64 = base64.b64encode(d["logo_bytes"]).decode()
-        logo_html = f'<img src="data:image/png;base64,{b64}" style="max-height:48px;max-width:130px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85;" />'
+        logo_html = f'<img src="data:image/png;base64,{b64}" style="max-height:80px;max-width:180px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.92;" />'
     else:
         logo_html = f'<span class="doc-nursery-nm">{d.get("nursery_name","Nursery Name")}</span>'
 
@@ -1004,6 +1012,7 @@ def render_html_preview(d):
 
     footer_text = d.get("footer_text") or "Confidential — For internal and family use only."
     child_name  = d.get("child_name") or "—"
+    child_first = get_first_name(child_name)
     nursery     = d.get("nursery_name") or "Nursery"
     pattern     = d.get("pattern") or "No specific pattern noted."
 
@@ -1244,6 +1253,7 @@ def build_pdf(d) -> bytes:
     all_skills    = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
     nursery   = d.get("nursery_name") or "Nursery"
     child     = d.get("child_name")   or "—"
+    child_first = get_first_name(child)
     footer_t  = d.get("footer_text")  or "Confidential — For internal and family use only."
 
     story = []
@@ -1259,9 +1269,9 @@ def build_pdf(d) -> bytes:
     if d.get("logo_bytes"):
         try:
             img_buf = BytesIO(d["logo_bytes"])
-            img = RLImage(img_buf, width=3*cm, height=1.8*cm, kind="proportional")
+            img = RLImage(img_buf, width=5*cm, height=3*cm, kind="proportional")
             img.hAlign = "CENTER"
-            story += [img, sp(0.2)]
+            story += [img, sp(0.3)]
         except Exception:
             pass
 
@@ -1270,7 +1280,7 @@ def build_pdf(d) -> bytes:
     therapist = d.get("therapist_name") or "—"
 
     demo_rows = [
-        [Paragraph("<b>Child Name</b>",     sSmall), Paragraph(child,                       sBody),
+        [Paragraph("<b>Child Name</b>",     sSmall), Paragraph(child_full,                  sBody),
          Paragraph("<b>Date of Birth</b>",  sSmall), Paragraph(dob_str,                     sBody)],
         [Paragraph("<b>Age</b>",            sSmall), Paragraph(d.get("age","—"),            sBody),
          Paragraph("<b>Class / Group</b>",  sSmall), Paragraph(d.get("class_group","—"),    sBody)],
@@ -1684,7 +1694,8 @@ def build_pdf_staff(d) -> bytes:
     today = datetime.now().strftime("%d %B %Y")
     nursery = d.get("nursery_name") or "Nursery"
     footer_t = d.get("footer_text") or "Confidential — For internal use only."
-    child = d.get("child_name") or "—"
+    child_full = d.get("child_name") or "—"
+    child = get_first_name(child_full)
 
     # Get main plan story by calling the internal build
     main_bytes = build_pdf(d)
@@ -1834,6 +1845,7 @@ def build_pdf_parent(d) -> bytes:
     skills   = d.get("skills", [])
     all_skills = skills + ([d["custom_skill"]] if d.get("custom_skill") else [])
     footer_t = d.get("footer_text") or "Confidential — For family use."
+    child_first = get_first_name(child)
 
     story = []
 
@@ -1847,7 +1859,7 @@ def build_pdf_parent(d) -> bytes:
     # Logo
     if d.get("logo_bytes"):
         try:
-            img = RLImage(BytesIO(d["logo_bytes"]), width=3*cm, height=1.8*cm, kind="proportional")
+            img = RLImage(BytesIO(d["logo_bytes"]), width=5*cm, height=3*cm, kind="proportional")
             img.hAlign = "CENTER"
             story += [img, sp(0.2)]
         except Exception:
@@ -1901,12 +1913,12 @@ def build_pdf_parent(d) -> bytes:
     story += [
         Paragraph(
             f"This is an <b>Individual Behaviour Support Plan</b> — a personalised programme designed specifically "
-            f"for <b>{child}</b>. It brings together structured sessions, targeted skill-building, and close teamwork "
+            f"for <b>{child_first}</b>. It brings together structured sessions, targeted skill-building, and close teamwork "
             f"between our team and your family.",
             sBody),
         Paragraph(
             f"<b>It is important to understand:</b> this plan is <i>not</i> a diagnosis. It does not mean something "
-            f"is 'wrong' with {child}. It simply means we have noticed some areas where a little extra support "
+            f"is 'wrong' with {child_first}. It simply means we have noticed some areas where a little extra support "
             f"could make a big difference — and we want to provide that support in the most effective way possible.",
             sBody),
         sp(0.2),
@@ -1916,8 +1928,8 @@ def build_pdf_parent(d) -> bytes:
     story += [Paragraph("What Are We Working On?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
     story += [
         Paragraph(
-            f"Our team has observed the following behaviours that we would like to support {child} with. "
-            f"Please remember — these behaviours are <i>not</i> 'bad behaviour'. They are {child}'s way of telling "
+            f"Our team has observed the following behaviours that we would like to support {child_first} with. "
+            f"Please remember — these behaviours are <i>not</i> 'bad behaviour'. They are {child_first}'s way of telling "
             f"us that something feels hard right now. Our job is to help build the skills to handle those "
             f"hard moments better:",
             sBody),
@@ -1944,7 +1956,7 @@ def build_pdf_parent(d) -> bytes:
     story += [Paragraph("What Skills Are We Building?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
     story += [
         Paragraph(
-            f"Our sessions are designed to build specific skills that will help {child} feel more confident, "
+            f"Our sessions are designed to build specific skills that will help {child_first} feel more confident, "
             f"calm, and capable. Here is what we are working on and what it means:",
             sBody),
     ]
@@ -1972,7 +1984,7 @@ def build_pdf_parent(d) -> bytes:
     story += [Paragraph("What Happens in a Session?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
     story += [
         Paragraph(
-            f"Sessions are warm, playful, and child-led as much as possible. {child} will not know they are in "
+            f"Sessions are warm, playful, and child-led as much as possible. {child_first} will not know they are in "
             f"a 'behaviour session' — they will just be playing and connecting with {therapist}. "
             f"Sessions happen <b>{freq}</b> ({spm} times per month).",
             sBody),
@@ -1989,7 +2001,7 @@ def build_pdf_parent(d) -> bytes:
     story += [
         Paragraph(
             f"Progress in early childhood is rarely a straight line — and that is completely normal. "
-            f"We will look for small, meaningful signs that {child} is growing. Here is what to watch for:",
+            f"We will look for small, meaningful signs that {child_first} is growing. Here is what to watch for:",
             sBody),
     ]
     _parent_prog = generate_dynamic_progress(
@@ -2003,21 +2015,21 @@ def build_pdf_parent(d) -> bytes:
     story += [Paragraph("How Can You Help at Home?", sSecHdr), hr(BARK, 0.5), sp(0.1)]
 
     home_tips = [
-        ("Stay consistent", f"Try to use the same calm, non-reactive approach when {child} struggles at home as we use here. "
+        ("Stay consistent", f"Try to use the same calm, non-reactive approach when {child_first} struggles at home as we use here. "
                             "Consistency between home and nursery is one of the most powerful things you can do."),
-        ("Name feelings out loud", f"When {child} seems upset, try saying 'I can see you feel frustrated' rather than 'stop that'. "
+        ("Name feelings out loud", f"When {child_first} seems upset, try saying 'I can see you feel frustrated' rather than 'stop that'. "
                                    "This builds emotional vocabulary and makes feelings feel safe to express."),
-        ("Celebrate the small wins", "Every time you notice {child} waiting, communicating, or calming down — even a little — "
+        ("Celebrate the small wins", "Every time you notice {child_first} waiting, communicating, or calming down — even a little — "
                                      "name it and celebrate it. 'I noticed you took a deep breath — that was brilliant.'"),
         ("Tell us what you notice", "You know your child best. If you see something at home — a new trigger, a new strategy that "
                                     "works, or a breakthrough — please share it with us. Your insights shape the programme."),
         ("Keep routines predictable", "Many children who struggle with regulation find surprise and change very hard. "
-                                      "Where possible, give {child} advance notice of any changes to routine."),
+                                      "Where possible, give {child_first} advance notice of any changes to routine."),
         ("Ask for support too", "This can feel a lot for parents. Please reach out to us any time you need guidance, "
                                 "reassurance, or just a conversation."),
     ]
     for title, tip in home_tips:
-        tip_filled = tip.replace("{child}", child)
+        tip_filled = tip.replace("{child_first}", child_first)
         story.append(Paragraph(f"✦  <b>{title}</b>", sEmph))
         story.append(Paragraph(tip_filled, sBox))
         story.append(sp(0.1))
@@ -2058,7 +2070,7 @@ def build_pdf_parent(d) -> bytes:
 
     # Closing warm message
     closing_row = [[Paragraph(
-        f"We are proud to support {child} and grateful to have you as a partner in this journey. "
+        f"We are proud to support {child_first} and grateful to have you as a partner in this journey. "
         f"Together, we can make a real difference. Please don't hesitate to reach out — our door is always open.",
         S("PC2", fontName="Helvetica-Oblique", fontSize=10.5, textColor=STONE, leading=17, alignment=TA_CENTER))]]
     ct2 = Table(closing_row, colWidths=[15.5*cm])
@@ -2075,7 +2087,7 @@ def build_pdf_parent(d) -> bytes:
     # Footer
     story += [
         hr(STONE, 0.5),
-        Paragraph(f"{footer_t}  |  Prepared for family of {child}  |  {today}  |  {nursery}", sFooter),
+        Paragraph(f"{footer_t}  |  Prepared for family of {child_first}  |  {today}  |  {nursery}", sFooter),
     ]
 
     def add_page_num(canvas_obj, doc_obj):
@@ -2203,7 +2215,8 @@ def build_docx(d) -> bytes:
     all_b  = d["behaviors"] + ([d["custom_behavior"]] if d.get("custom_behavior") else [])
     all_sk = d.get("skills", []) + ([d["custom_skill"]] if d.get("custom_skill") else [])
     nursery = d.get("nursery_name") or "Nursery"
-    child   = d.get("child_name")   or "—"
+    child_full = d.get("child_name") or "—"
+    child   = get_first_name(child_full)
     footer_t = d.get("footer_text") or "Confidential — For internal and family use only."
 
     # -- Title -----------------------------------------------------------------
@@ -2831,7 +2844,8 @@ def build_activity_pack(d) -> bytes:
     C_WHITE        = colors.white
     C_BORDER       = HexColor("#D0D8E4")
 
-    child       = d.get("child_name") or "Child"
+    child_full  = d.get("child_name") or "Child"
+    child       = get_first_name(child_full)
     therapist   = d.get("therapist_name") or "Therapist"
     nursery     = d.get("nursery_name") or "Nursery"
     class_group = d.get("class_group") or "—"
@@ -3668,6 +3682,7 @@ def build_activity_pack(d) -> bytes:
         activity_pool = [ACTIVITY_LIBRARY["Emotional Regulation"][0]]
 
     num_acts = len(activity_pool)
+    # Distribute ALL monthly sessions across activities
     base, remainder = divmod(sessions, num_acts)
     session_counts = [base + (1 if i < remainder else 0) for i in range(num_acts)]
     session_counts = [max(c, 1) for c in session_counts]
@@ -3802,14 +3817,14 @@ def build_activity_pack(d) -> bytes:
         c2.setFillColor(HexColor("#1C5F6B"))
         c2.roundRect(w/2-5.5*cm, h*0.42+1*cm, 11*cm, 5.5*cm, 8, fill=1, stroke=0)
         c2.setFillColor(C_WHITE); c2.setFont("Helvetica-Bold", 22)
-        c2.drawCentredString(w/2, h*0.42+5.3*cm, child)
+        c2.drawCentredString(w/2, h*0.42+5.3*cm, child_full)
         c2.setFont("Helvetica", 11); c2.setFillColor(HexColor("#B2DDE5"))
         c2.drawCentredString(w/2, h*0.42+4.5*cm, f"Age: {age}   |   Class: {class_group}")
         c2.setFont("Helvetica", 10); c2.setFillColor(HexColor("#7ABEC9"))
         c2.drawCentredString(w/2, h*0.42+3.6*cm, f"Therapist: {therapist}")
-        c2.drawCentredString(w/2, h*0.42+2.9*cm, f"Sessions: {freq_label}  |  {sessions} per month")
+        c2.drawCentredString(w/2, h*0.42+2.9*cm, f"Sessions this month: {sessions}  ({freq_label})")
         c2.drawCentredString(w/2, h*0.42+2.2*cm, f"Start Date: {start_str}")
-        c2.drawCentredString(w/2, h*0.42+1.5*cm, f"Activities Planned: {len(schedule)}")
+        c2.drawCentredString(w/2, h*0.42+1.5*cm, f"Activities in this monthly pack: {len(schedule)}")
         act_colors_cv = [C_TEAL, C_GOLD, C_GREEN, C_PURPLE, C_CORAL, C_ORANGE, C_BLUE]
         tag_w2 = min(3.5*cm, (w-3*cm)/max(len(schedule),1))
         tag_gap2 = 0.3*cm
@@ -3838,14 +3853,14 @@ def build_activity_pack(d) -> bytes:
     def sched_content():
         s = [_sp(4)]
         s.append(Paragraph("Session Schedule Overview", ST["page_title"]))
-        s.append(Paragraph(f"Child: {child}  |  Therapist: {therapist}  |  {freq_label}  |  {sessions} sessions planned", ST["h3"]))
+        s.append(Paragraph(f"Child: {child_full}  |  Therapist: {therapist}  |  {freq_label}  |  {sessions} sessions this month", ST["h3"]))
         s.append(_hr(C_TEAL)); s.append(_sp())
         s.append(Paragraph(
             f"This pack contains {len(schedule)} activit{'y' if len(schedule)==1 else 'ies'} "
-            f"planned across {sessions} sessions this month. Activities have been selected based on "
-            f"the targeted skill areas and distributed to ensure balanced coverage. "
-            f"Where a skill requires reinforcement, an activity is assigned across multiple sessions - "
-            f"this is intentional and reflects best practice for early childhood skill acquisition.",
+            f"distributed across all {sessions} sessions scheduled for this month. "
+            f"Activities were selected based on targeted skill areas and behaviours to ensure "
+            f"balanced monthly coverage. Where a skill requires reinforcement, an activity is "
+            f"assigned across multiple sessions — this reflects best practice for skill acquisition.",
             ST["body"]))
         s.append(_sp(1.5))
         if behaviors:
@@ -3900,7 +3915,7 @@ def build_activity_pack(d) -> bytes:
         return s
 
     def sched_chrome(c2, doc2):
-        _chrome(c2, doc2, "Session Schedule Overview", f"{child}  |  {sessions} sessions  |  {len(schedule)} activities", C_TEAL, "SCHEDULE")
+        _chrome(c2, doc2, "Monthly Session Schedule", f"{child_full}  |  {sessions} sessions this month  |  {len(schedule)} activities", C_TEAL, "SCHEDULE")
 
     temp_files.append(_make_temp(sched_content, sched_chrome))
 
